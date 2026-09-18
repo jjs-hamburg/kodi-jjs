@@ -12,8 +12,9 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <deque>
-#include <stdint.h>
 #include <vector>
 
 struct TrueHDMajorSyncInfo
@@ -28,6 +29,46 @@ enum class Type
 {
   PADDING,
   DATA,
+};
+
+class CTrueHDTrace
+{
+public:
+  enum class Stage : uint8_t
+  {
+    DEMUX,
+    DEMUX_EOF,
+    PACK_IN,
+    PACK_SKIP_NOSYNC,
+    MAT_FLUSH,
+    MAT_POP,
+    MAT_TRANSFER,
+    READRAW_OUT,
+    READRAW_EMPTY,
+    DECODER_FILL,
+    DECODER_TAKE,
+    DECODER_DISCARD,
+    DECODER_EOF,
+    AE_ADD,
+    SEEK,
+    HANDOVER_BEGIN,
+    HANDOVER_END,
+  };
+
+  static uint32_t RegisterStream();
+  static uint64_t Hash(const uint8_t* data, std::size_t size);
+  static uint64_t Record(Stage stage,
+                         uint32_t streamId,
+                         uint64_t itemId,
+                         uint32_t size,
+                         uint64_t hash,
+                         int64_t value1 = 0,
+                         int64_t value2 = 0,
+                         int64_t value3 = 0,
+                         int64_t value4 = 0);
+  static void DumpAround(uint64_t centerSequence,
+                         uint64_t eventsBefore = 256,
+                         uint64_t eventsAfter = 384);
 };
 
 class CPackerMAT
@@ -46,6 +87,7 @@ public:
   {
     return static_cast<uint32_t>(m_outputQueue.size());
   }
+  void SetTraceStreamId(uint32_t streamId) { m_traceStreamId = streamId; }
 
 private:
   struct MATState
@@ -97,6 +139,18 @@ private:
   uint32_t m_bufferCount{0};
   std::vector<uint8_t> m_buffer;
   std::deque<std::vector<uint8_t>> m_outputQueue;
+
+  struct TraceQueuedMAT
+  {
+    uint64_t serial{0};
+    uint32_t streamId{0};
+  };
+  uint32_t m_traceStreamId{0};
+  uint64_t m_traceFrameSeq{0};
+  uint64_t m_traceMatSeq{0};
+  uint64_t m_traceMatFirstFrameSeq{0};
+  uint64_t m_traceMatLastFrameSeq{0};
+  std::deque<TraceQueuedMAT> m_traceOutputQueue;
 };
 
 class CBitStream

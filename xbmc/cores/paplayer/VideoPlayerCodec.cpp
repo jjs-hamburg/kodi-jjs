@@ -13,6 +13,7 @@
 #include "cores/AudioEngine/AEResampleFactory.h"
 #include "cores/AudioEngine/Interfaces/AE.h"
 #include "cores/AudioEngine/Utils/AEUtil.h"
+#include "cores/AudioEngine/Utils/PackerMAT.h"
 #include "cores/VideoPlayer/DVDCodecs/DVDFactoryCodec.h"
 #include "cores/VideoPlayer/DVDCodecs/Audio/DVDAudioCodecPassthrough.h"
 #include "cores/VideoPlayer/DVDDemuxers/DVDDemuxUtils.h"
@@ -76,6 +77,10 @@ bool VideoPlayerCodec::PrepareRawSeamlessHandoverFrom(ICodec* previousCodec)
               "VideoPlayerCodec::PrepareRawSeamlessHandoverFrom - successor rewind failed");
     return false;
   }
+
+  ++m_traceGeneration;
+  CTrueHDTrace::Record(CTrueHDTrace::Stage::SEEK, m_traceStreamId, m_traceGeneration,
+                       0, 0, 0, 1, m_traceGeneration, 1);
 
   m_pAudioCodec->Reset();
   m_nDecodedLen = 0;
@@ -190,6 +195,21 @@ bool VideoPlayerCodec::Init(const CFileItem &file, unsigned int filecache)
       throw std::runtime_error("m_pInputStream reference count is greater than 1");
     m_pInputStream.reset();
     return false;
+  }
+
+  m_traceStreamId = 0;
+  m_traceDemuxSeq = 0;
+  m_traceRawSeq = 0;
+  m_traceGeneration = 0;
+  if (ptStreamTye == CAEStreamInfo::STREAM_TYPE_TRUEHD)
+  {
+    m_traceStreamId = CTrueHDTrace::RegisterStream();
+    if (auto* passthrough =
+            dynamic_cast<CDVDAudioCodecPassthrough*>(m_pAudioCodec.get()))
+      passthrough->SetTrueHDTraceStreamId(m_traceStreamId);
+
+    CLog::Log(LOGINFO, "TRUEHDTRACE stream={} file={}", m_traceStreamId,
+              file.GetDynPath());
   }
 
   //  Extract ReplayGain info
@@ -337,6 +357,10 @@ void VideoPlayerCodec::DeInit()
 
   m_strFileName = "";
   m_bInited = false;
+  m_traceStreamId = 0;
+  m_traceDemuxSeq = 0;
+  m_traceRawSeq = 0;
+  m_traceGeneration = 0;
 }
 
 bool VideoPlayerCodec::Seek(int64_t iSeekTime)
@@ -346,6 +370,13 @@ bool VideoPlayerCodec::Seek(int64_t iSeekTime)
   bool seekback = true;
 
   bool ret = m_pDemuxer->SeekTime((int)iSeekTime, seekback);
+  if (m_traceStreamId)
+  {
+    ++m_traceGeneration;
+    CTrueHDTrace::Record(CTrueHDTrace::Stage::SEEK, m_traceStreamId,
+                         m_traceGeneration, 0, 0, iSeekTime, ret ? 1 : 0,
+                         m_traceGeneration, 0);
+  }
   m_pAudioCodec->Reset();
 
   m_nDecodedLen = 0;
@@ -445,11 +476,26 @@ int VideoPlayerCodec::ReadRaw(uint8_t **pBuffer, int *bufferSize)
   DemuxPacket* pPacket;
 
   m_nDecodedLen = 0;
+  *pBuffer = nullptr;
+  *bufferSize = 0;
   DVDAudioFrame audioframe;
 
+  // GetData() can produce a complete RAW packet from codec/parser backlog
+  // without reading another demux packet. Return that packet to the caller;
+  // the old code consumed it and returned READ_SUCCESS with bufferSize still 0.
   m_pAudioCodec->GetData(audioframe);
   if (audioframe.nb_frames)
   {
+    *bufferSize = audioframe.nb_frames;
+    *pBuffer = audioframe.data[0];
+    if (m_traceStreamId)
+    {
+      CTrueHDTrace::Record(
+          CTrueHDTrace::Stage::READRAW_OUT, m_traceStreamId, ++m_traceRawSeq,
+          static_cast<uint32_t>(*bufferSize),
+          CTrueHDTrace::Hash(*pBuffer, static_cast<std::size_t>(*bufferSize)),
+          1, m_traceGeneration);
+    }
     return READ_SUCCESS;
   }
 
@@ -460,8 +506,28 @@ int VideoPlayerCodec::ReadRaw(uint8_t **pBuffer, int *bufferSize)
 
   if (!pPacket)
   {
+    if (m_traceStreamId)
+      CTrueHDTrace::Record(CTrueHDTrace::Stage::DEMUX_EOF, m_traceStreamId,
+                           m_traceDemuxSeq, 0, 0, m_traceGeneration);
     return READ_EOF;
   }
+
+  uint64_t demuxItem = 0;
+  if (m_traceStreamId)
+  {
+    demuxItem = ++m_traceDemuxSeq;
+    const bool hasPts = pPacket->pts != DVD_NOPTS_VALUE;
+    const bool hasDts = pPacket->dts != DVD_NOPTS_VALUE;
+    CTrueHDTrace::Record(
+        CTrueHDTrace::Stage::DEMUX, m_traceStreamId, demuxItem,
+        static_cast<uint32_t>(std::max(pPacket->iSize, 0)),
+        CTrueHDTrace::Hash(pPacket->pData,
+                           pPacket->iSize > 0 ? static_cast<std::size_t>(pPacket->iSize) : 0),
+        hasPts ? static_cast<int64_t>(pPacket->pts) : 0,
+        hasDts ? static_cast<int64_t>(pPacket->dts) : 0,
+        m_traceGeneration, (hasPts ? 1 : 0) | (hasDts ? 2 : 0));
+  }
+
   pPacket->pts = DVD_NOPTS_VALUE;
   pPacket->dts = DVD_NOPTS_VALUE;
   int ret = m_pAudioCodec->AddData(*pPacket);
@@ -476,10 +542,19 @@ int VideoPlayerCodec::ReadRaw(uint8_t **pBuffer, int *bufferSize)
   {
     *bufferSize = audioframe.nb_frames;
     *pBuffer = audioframe.data[0];
+    if (m_traceStreamId)
+    {
+      CTrueHDTrace::Record(
+          CTrueHDTrace::Stage::READRAW_OUT, m_traceStreamId, ++m_traceRawSeq,
+          static_cast<uint32_t>(*bufferSize),
+          CTrueHDTrace::Hash(*pBuffer, static_cast<std::size_t>(*bufferSize)),
+          0, m_traceGeneration, demuxItem);
+    }
   }
-  else
+  else if (m_traceStreamId)
   {
-    *bufferSize = 0;
+    CTrueHDTrace::Record(CTrueHDTrace::Stage::READRAW_EMPTY, m_traceStreamId,
+                         demuxItem, 0, 0, m_traceGeneration);
   }
 
   return READ_SUCCESS;

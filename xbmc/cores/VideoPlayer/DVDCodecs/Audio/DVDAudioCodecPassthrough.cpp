@@ -45,6 +45,13 @@ CDVDAudioCodecPassthrough::~CDVDAudioCodecPassthrough(void)
   Dispose();
 }
 
+void CDVDAudioCodecPassthrough::SetTrueHDTraceStreamId(uint32_t streamId)
+{
+  m_traceStreamId = streamId;
+  if (m_packerMAT)
+    m_packerMAT->SetTraceStreamId(streamId);
+}
+
 bool CDVDAudioCodecPassthrough::CanTransferMATStateTo(
     const CDVDAudioCodecPassthrough& target) const
 {
@@ -68,7 +75,17 @@ bool CDVDAudioCodecPassthrough::TransferMATStateTo(CDVDAudioCodecPassthrough& ta
       target.m_packerMAT->GetBufferedBytes(), target.m_packerMAT->GetBufferedSamples(),
       target.m_packerMAT->GetPendingPadding(), target.m_packerMAT->GetQueuedPacketCount());
 
+  if (m_traceStreamId || target.m_traceStreamId)
+  {
+    CTrueHDTrace::Record(
+        CTrueHDTrace::Stage::MAT_TRANSFER, m_traceStreamId, 0,
+        m_packerMAT->GetBufferedBytes(), 0, target.m_traceStreamId,
+        target.m_packerMAT->GetBufferedBytes(), m_packerMAT->GetBufferedSamples(),
+        target.m_packerMAT->GetBufferedSamples());
+  }
+
   target.m_packerMAT = std::move(m_packerMAT);
+  target.m_packerMAT->SetTraceStreamId(target.m_traceStreamId);
   return true;
 }
 

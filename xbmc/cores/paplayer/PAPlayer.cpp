@@ -17,6 +17,7 @@
 #include "cores/AudioEngine/Interfaces/AEStream.h"
 #include "cores/AudioEngine/Utils/AEStreamData.h"
 #include "cores/AudioEngine/Utils/AEUtil.h"
+#include "cores/AudioEngine/Utils/PackerMAT.h"
 #include "cores/DataCacheCore.h"
 #include "cores/VideoPlayer/Process/ProcessInfo.h"
 #include "messaging/ApplicationMessenger.h"
@@ -32,6 +33,7 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <utility>
 
 using namespace std::chrono_literals;
@@ -722,6 +724,17 @@ inline void PAPlayer::ProcessStreams(double &freeBufferTime)
           const auto handoverStart = std::chrono::steady_clock::now();
           const unsigned int handoverSpaceBefore = si->m_stream->GetSpace();
           const double handoverDelayBeforeMs = si->m_stream->GetDelay() * 1000.0;
+          const uint32_t oldTraceStreamId =
+              si->m_decoder.GetCodec() ? si->m_decoder.GetCodec()->GetTrueHDTraceStreamId() : 0;
+          const uint32_t nextTraceStreamId =
+              next->m_decoder.GetCodec() ? next->m_decoder.GetCodec()->GetTrueHDTraceStreamId() : 0;
+          const uint64_t traceBoundary =
+              oldTraceStreamId
+                  ? CTrueHDTrace::Record(
+                        CTrueHDTrace::Stage::HANDOVER_BEGIN, oldTraceStreamId, 0, 0, 0,
+                        nextTraceStreamId, handoverSpaceBefore,
+                        static_cast<int64_t>(handoverDelayBeforeMs * 1000.0))
+                  : 0;
 
           // The successor was pre-opened with a fresh MAT packer. At the clean
           // TrueHD boundary, discard that speculative packetization and let the
@@ -801,6 +814,13 @@ inline void PAPlayer::ProcessStreams(double &freeBufferTime)
               handoverSpaceAfter, handoverDelayBeforeMs, handoverDelayAfterMs,
               handoverReadCalls, handoverPackets, handoverElapsedUs);
 
+          if (nextTraceStreamId)
+          {
+            CTrueHDTrace::Record(CTrueHDTrace::Stage::HANDOVER_END, nextTraceStreamId,
+                                 0, 0, 0, oldTraceStreamId, handoverPackets,
+                                 handoverReadCalls, matContinuation ? 1 : 0);
+          }
+
           UpdateGUIData(next);
 
           // Never destroy the old Android audio decoder on the PAPlayer
@@ -848,6 +868,17 @@ inline void PAPlayer::ProcessStreams(double &freeBufferTime)
 
           CLog::Log(LOGINFO,
                     "PAPlayer::ProcessStreams - seamless RAW handover completed");
+
+          if (traceBoundary)
+          {
+            CServiceBroker::GetJobManager()->Submit(
+                [traceBoundary]()
+                {
+                  std::this_thread::sleep_for(1s);
+                  CTrueHDTrace::DumpAround(traceBoundary);
+                },
+                CJob::PRIORITY_NORMAL);
+          }
 
           // Do not sleep before the next PAP cycle. The new decoder already
           // contains primed RAW data and should feed the existing AE stream
@@ -1124,7 +1155,22 @@ bool PAPlayer::QueueData(StreamInfo *si)
     uint8_t *data = si->m_decoder.GetRawData(size);
     if (data && size)
     {
+      const ICodec* rawCodec = si->m_decoder.GetCodec();
+      const uint32_t traceStreamId =
+          rawCodec ? rawCodec->GetTrueHDTraceStreamId() : 0;
+      const int framesSentBefore = si->m_framesSent;
+      const uint64_t traceHash =
+          traceStreamId
+              ? CTrueHDTrace::Hash(data, static_cast<std::size_t>(size))
+              : 0;
+
       int added = si->m_stream->AddData(&data, 0, size, nullptr);
+      if (traceStreamId)
+      {
+        CTrueHDTrace::Record(CTrueHDTrace::Stage::AE_ADD, traceStreamId, 0,
+                             static_cast<uint32_t>(size), traceHash, space, added,
+                             framesSentBefore, si->m_stream->GetSpace());
+      }
       if (added != size)
       {
         CLog::Log(LOGERROR, "PAPlayer::QueueData - unknown error");

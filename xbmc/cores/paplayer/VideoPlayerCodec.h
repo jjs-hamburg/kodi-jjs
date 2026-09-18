@@ -31,6 +31,7 @@ public:
   bool CanInit() override;
   bool CanSeek() override;
   bool PrepareRawSeamlessHandoverFrom(ICodec* previous) override;
+  uint32_t GetTrueHDTraceStreamId() const override { return m_traceStreamId; }
 
   void DeInit();
   AEAudioFormat GetFormat();
@@ -62,5 +63,10 @@ private:
   int m_channels{0};
 
   std::unique_ptr<CProcessInfo> m_processInfo;
+
+  uint32_t m_traceStreamId{0};
+  uint64_t m_traceDemuxSeq{0};
+  uint64_t m_traceRawSeq{0};
+  uint32_t m_traceGeneration{0};
 };
 
