@@ -31,6 +31,7 @@
 
 #include <memory>
 #include <mutex>
+#include <utility>
 
 using namespace std::chrono_literals;
 
@@ -53,6 +54,33 @@ PAPlayer::PAPlayer(IPlayerCallback& callback)
 PAPlayer::~PAPlayer()
 {
   CloseFile();
+}
+
+bool PAPlayer::CanReuseRawStream(const StreamInfo* current, const StreamInfo* next) const
+{
+  if (!current || !next || !current->m_stream)
+    return false;
+
+  if (m_upcomingCrossfadeMS != 0)
+    return false;
+
+  if (current->m_audioFormat.m_dataFormat != AE_FMT_RAW ||
+      next->m_audioFormat.m_dataFormat != AE_FMT_RAW)
+    return false;
+
+  // Reuse is intentionally strict. Any format difference falls back to Kodi's
+  // existing drain/reopen path.
+  return current->m_audioFormat == next->m_audioFormat;
+}
+
+void PAPlayer::ClearPendingRawStream()
+{
+  if (!m_pendingRawStream)
+    return;
+
+  m_pendingRawStream->m_decoder.Destroy();
+  delete m_pendingRawStream;
+  m_pendingRawStream = nullptr;
 }
 
 void PAPlayer::SoftStart(bool wait/* = false */)
@@ -188,12 +216,15 @@ void PAPlayer::CloseAllStreams(bool fade/* = true */)
       si->m_decoder.Destroy();
       delete si;
     }
+
+    ClearPendingRawStream();
     m_currentStream = nullptr;
   }
   else
   {
     SoftStop(false, true);
     std::unique_lock<CCriticalSection> lock(m_streamsLock);
+    ClearPendingRawStream();
     m_currentStream = NULL;
   }
 }
@@ -375,6 +406,11 @@ bool PAPlayer::QueueNextFileEx(const CFileItem &file, bool fadeIn)
   si->m_volume = (fadeIn && m_upcomingCrossfadeMS) ? 0.0f : 1.0f;
   si->m_fadeOutTriggered = false;
   si->m_isSlaved = false;
+  si->m_prepareTriggered = false;
+  si->m_playNextAtFrame = 0;
+  si->m_playNextTriggered = false;
+  si->m_waitOnDrain = false;
+  si->m_reachedEnd = false;
 
   si->m_decoderTotal = si->m_decoder.TotalTime();
   int64_t streamTotalTime = si->m_decoderTotal;
@@ -406,20 +442,48 @@ bool PAPlayer::QueueNextFileEx(const CFileItem &file, bool fadeIn)
       si->m_prepareNextAtFrame = (int)((streamTotalTime - TIME_TO_CACHE_NEXT_FILE - m_defaultCrossfadeMS) * si->m_audioFormat.m_sampleRate / 1000.0f);
   }
 
-  if (m_currentStream && ((m_currentStream->m_audioFormat.m_dataFormat == AE_FMT_RAW) || (si->m_audioFormat.m_dataFormat == AE_FMT_RAW)))
+  bool rejectRawOverlap = false;
   {
-    m_currentStream->m_prepareTriggered = false;
-    m_currentStream->m_waitOnDrain = true;
-    m_currentStream->m_prepareNextAtFrame = 0;
+    std::unique_lock<CCriticalSection> lock(m_streamsLock);
+
+    if (m_currentStream &&
+        ((m_currentStream->m_audioFormat.m_dataFormat == AE_FMT_RAW) ||
+         (si->m_audioFormat.m_dataFormat == AE_FMT_RAW)))
+    {
+      if (CanReuseRawStream(m_currentStream, si))
+      {
+        // ActiveAE cannot own two RAW streams at once. Keep the next decoder
+        // fully opened/primed but deliberately do not call PrepareStream().
+        // At the clean end of the current item ProcessStreams() transfers the
+        // already running IAEStream to this StreamInfo.
+        ClearPendingRawStream();
+        m_pendingRawStream = si;
+
+        m_currentStream->m_prepareTriggered = true;
+        m_currentStream->m_waitOnDrain = false;
+        m_currentStream->m_prepareNextAtFrame = 0;
+
+        CLog::Log(LOGINFO,
+                  "PAPlayer::QueueNextFileEx - cached compatible RAW decoder for seamless handover");
+        return true;
+      }
+
+      // Preserve Kodi's original behavior for RAW/PCM transitions or any
+      // incompatible RAW format.
+      ClearPendingRawStream();
+      m_currentStream->m_prepareTriggered = false;
+      m_currentStream->m_waitOnDrain = true;
+      m_currentStream->m_prepareNextAtFrame = 0;
+      rejectRawOverlap = true;
+    }
+  }
+
+  if (rejectRawOverlap)
+  {
     si->m_decoder.Destroy();
     delete si;
     return false;
   }
-
-  si->m_prepareTriggered = false;
-  si->m_playNextAtFrame = 0;
-  si->m_playNextTriggered = false;
-  si->m_waitOnDrain = false;
 
   if (!PrepareStream(si))
   {
@@ -631,9 +695,130 @@ inline void PAPlayer::ProcessStreams(double &freeBufferTime)
       m_currentStream = si;
       UpdateGUIData(si); //update for GUI
     }
+
+    bool processFailedOrFinished = false;
+    const bool streamFinishedByTransition =
+        si->m_playNextTriggered && si->m_stream && !si->m_stream->IsFading();
+
+    if (!streamFinishedByTransition)
+      processFailedOrFinished = !ProcessStream(si, freeBufferTime);
+
     /* if the stream is finishing */
-    if ((si->m_playNextTriggered && si->m_stream && !si->m_stream->IsFading()) || !ProcessStream(si, freeBufferTime))
+    if (streamFinishedByTransition || processFailedOrFinished)
     {
+      if (processFailedOrFinished && si == m_currentStream && m_pendingRawStream)
+      {
+        if (si->m_reachedEnd && CanReuseRawStream(si, m_pendingRawStream))
+        {
+          StreamInfo* next = m_pendingRawStream;
+          m_pendingRawStream = nullptr;
+
+          // Finish bookkeeping for the old logical track while its AE stream
+          // still contains only data from that track. This keeps the close
+          // bookmark's delay accounting correct.
+          CloseFileCB(*si);
+
+          // Transfer the *same* running RAW stream to the already-opened
+          // decoder of the next track.
+          next->m_stream = std::move(si->m_stream);
+          next->m_started = true;
+          next->m_isSlaved = false;
+          next->m_waitOnDrain = false;
+          next->m_reachedEnd = false;
+
+          *itt = next;
+          m_currentStream = next;
+
+          // Keep the running RAW stream fed before doing any potentially slow
+          // old-decoder teardown or playback callbacks. The pending decoder
+          // already contains one primed RAW packet; append it immediately and
+          // opportunistically fill all currently available AE stream space.
+          unsigned int handoverPackets = 0;
+          if (QueueData(next))
+          {
+            ++handoverPackets;
+
+            while (next->m_stream->GetSpace() > 0)
+            {
+              const int status = next->m_decoder.GetStatus();
+              if (status == STATUS_ENDED || status == STATUS_NO_FILE)
+                break;
+
+              const int readResult = next->m_decoder.ReadSamples(PACKET_SIZE);
+              if (readResult != RET_SUCCESS)
+                break;
+
+              if (!QueueData(next))
+                break;
+
+              ++handoverPackets;
+            }
+          }
+
+          CLog::Log(LOGINFO,
+                    "PAPlayer::ProcessStreams - seamless RAW handover prefilled {} packet(s)",
+                    handoverPackets);
+
+          UpdateGUIData(next);
+
+          // Never destroy the old Android audio decoder on the PAPlayer
+          // thread. MediaCodec stop()/release() can block for hundreds of
+          // milliseconds (or longer), while a RAW stream may only accept one
+          // successor packet at a time. That would prevent the PAPlayer loop
+          // from feeding the reused stream and can underrun AudioTrack.
+          //
+          // The old StreamInfo no longer owns an AE stream and is no longer
+          // referenced by PAPlayer, so its decoder can be retired safely on a
+          // JobManager worker without using PAPlayer as the job callback.
+          StreamInfo* retired = si;
+          CServiceBroker::GetJobManager()->Submit(
+              [retired]()
+              {
+                CLog::Log(LOGINFO,
+                          "PAPlayer::ProcessStreams - deferred old RAW decoder cleanup started");
+                retired->m_decoder.Destroy();
+                delete retired;
+                CLog::Log(LOGINFO,
+                          "PAPlayer::ProcessStreams - deferred old RAW decoder cleanup completed");
+              },
+              CJob::PRIORITY_NORMAL);
+
+          // Playback callbacks can block on GUI/application locks for a
+          // highly variable amount of time. With RAW passthrough the reused
+          // stream may only have accepted one successor packet, so never run
+          // those callbacks on the PAPlayer thread during the handover.
+          const bool signalPlaybackStarted = m_signalStarted;
+          m_signalStarted = true;
+          IPlayerCallback* callback = &m_callback;
+          CFileItem callbackFile(*next->m_fileItem);
+          CServiceBroker::GetJobManager()->Submit(
+              [callback, callbackFile, signalPlaybackStarted]()
+              {
+                CLog::Log(LOGINFO,
+                          "PAPlayer::ProcessStreams - deferred RAW transition callbacks started");
+                if (signalPlaybackStarted)
+                  callback->OnPlayBackStarted(callbackFile);
+                callback->OnAVStarted(callbackFile);
+                CLog::Log(LOGINFO,
+                          "PAPlayer::ProcessStreams - deferred RAW transition callbacks completed");
+              },
+              CJob::PRIORITY_NORMAL);
+
+          CLog::Log(LOGINFO,
+                    "PAPlayer::ProcessStreams - seamless RAW handover completed");
+
+          // Do not sleep before the next PAP cycle. The new decoder already
+          // contains primed RAW data and should feed the existing AE stream
+          // immediately.
+          freeBufferTime = 1.0;
+          return;
+        }
+
+        // A cached successor must never survive the demise of the stream it
+        // was prepared for. Fall back to Kodi's normal cleanup path.
+        ClearPendingRawStream();
+      }
+
       if (!si->m_prepareTriggered)
       {
         if (si->m_waitOnDrain)
@@ -782,10 +967,15 @@ inline bool PAPlayer::ProcessStream(StreamInfo *si, double &freeBufferTime)
   }
 
   int status = si->m_decoder.GetStatus();
-  if (status == STATUS_ENDED || status == STATUS_NO_FILE ||
+  const bool endOffsetReached =
+      si->m_endOffset &&
+      si->m_framesSent >=
+          (si->m_endOffset - si->m_startOffset) * si->m_audioFormat.m_sampleRate / 1000;
+
+  if (status == STATUS_ENDED   ||
+      status == STATUS_NO_FILE ||
       si->m_decoder.ReadSamples(PACKET_SIZE) == RET_ERROR ||
-      ((si->m_endOffset) && (si->m_framesSent >= (si->m_endOffset - si->m_startOffset) *
-                                                     si->m_audioFormat.m_sampleRate / 1000)))
+      endOffsetReached)
   {
     if (si == m_currentStream && si->m_nextFileItem)
     {
@@ -827,6 +1017,7 @@ inline bool PAPlayer::ProcessStream(StreamInfo *si, double &freeBufferTime)
     }
     else
     {
+      si->m_reachedEnd = (status == STATUS_ENDED) || endOffsetReached;
       CLog::Log(LOGINFO, "PAPlayer::ProcessStream - Stream Finished");
       return false;
     }

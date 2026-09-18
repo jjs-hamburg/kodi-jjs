@@ -107,6 +107,7 @@ private:
 
     bool m_isSlaved;                     /* true if the stream has been slaved to another */
     bool m_waitOnDrain;                  /* wait for stream being drained in AE */
+    bool m_reachedEnd = false;            /* true only for a clean decoder/end-offset finish */
   };
 
   typedef std::list<StreamInfo*> StreamList;
@@ -122,6 +123,7 @@ private:
   unsigned int m_upcomingCrossfadeMS = 0; /* how long the upcoming crossfade is in ms */
   CEvent              m_startEvent;          /* event for playback start */
   StreamInfo* m_currentStream = nullptr;
+  StreamInfo* m_pendingRawStream = nullptr;  /* decoded/primed RAW successor; no AE stream yet */
   IAudioCallback*     m_audioCallback;       /* the viz audio callback */
 
   CCriticalSection    m_streamsLock;         /* lock for the stream list */
@@ -134,6 +136,8 @@ private:
   std::unique_ptr<CProcessInfo> m_processInfo;
 
   bool QueueNextFileEx(const CFileItem &file, bool fadeIn);
+  bool CanReuseRawStream(const StreamInfo* current, const StreamInfo* next) const;
+  void ClearPendingRawStream();
   void SoftStart(bool wait = false);
   void SoftStop(bool wait = false, bool close = true);
   void CloseAllStreams(bool fade = true);
