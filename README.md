@@ -1,5 +1,10 @@
 ![Kodi Logo](docs/resources/banner.png)
 
+> **Kodi JJS:** Kodi 21.2 Omega fork for **gapless Dolby TrueHD / Atmos playback**,
+> seamless RAW passthrough handover and TrueHD MAT transition handling.
+> See [README.JJS.md](README.JJS.md) for the JJS-specific changes.
+
+
 <p align="center">
   <strong>
     <a href="https://kodi.tv/">website</a>
