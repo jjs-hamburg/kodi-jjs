@@ -39,6 +39,14 @@ public:
   bool PackTrueHD(const uint8_t* data, int size);
   std::vector<uint8_t> GetOutputFrame();
 
+  uint32_t GetBufferedBytes() const { return m_bufferCount; }
+  uint32_t GetBufferedSamples() const { return m_state.samples; }
+  uint32_t GetPendingPadding() const { return m_state.padding; }
+  uint32_t GetQueuedPacketCount() const
+  {
+    return static_cast<uint32_t>(m_outputQueue.size());
+  }
+
 private:
   struct MATState
   {

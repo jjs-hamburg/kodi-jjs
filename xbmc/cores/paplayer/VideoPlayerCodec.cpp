@@ -14,6 +14,7 @@
 #include "cores/AudioEngine/Interfaces/AE.h"
 #include "cores/AudioEngine/Utils/AEUtil.h"
 #include "cores/VideoPlayer/DVDCodecs/DVDFactoryCodec.h"
+#include "cores/VideoPlayer/DVDCodecs/Audio/DVDAudioCodecPassthrough.h"
 #include "cores/VideoPlayer/DVDDemuxers/DVDDemuxUtils.h"
 #include "cores/VideoPlayer/DVDDemuxers/DVDFactoryDemuxer.h"
 #include "cores/VideoPlayer/DVDInputStreams/DVDFactoryInputStream.h"
@@ -51,6 +52,42 @@ void VideoPlayerCodec::SetContentType(const std::string &strContent)
 void  VideoPlayerCodec::SetPassthroughStreamType(CAEStreamInfo::DataType streamType)
 {
   m_srcFormat.m_streamInfo.m_type = streamType;
+}
+
+bool VideoPlayerCodec::PrepareRawSeamlessHandoverFrom(ICodec* previousCodec)
+{
+  auto* previous = dynamic_cast<VideoPlayerCodec*>(previousCodec);
+  if (!previous || !m_pDemuxer || !m_pAudioCodec || !previous->m_pAudioCodec)
+    return false;
+
+  auto* currentPassthrough =
+      dynamic_cast<CDVDAudioCodecPassthrough*>(m_pAudioCodec.get());
+  auto* previousPassthrough =
+      dynamic_cast<CDVDAudioCodecPassthrough*>(previous->m_pAudioCodec.get());
+
+  if (!currentPassthrough || !previousPassthrough ||
+      !previousPassthrough->CanTransferMATStateTo(*currentPassthrough))
+    return false;
+
+  bool seekback = true;
+  if (!m_pDemuxer->SeekTime(0, seekback))
+  {
+    CLog::Log(LOGWARNING,
+              "VideoPlayerCodec::PrepareRawSeamlessHandoverFrom - successor rewind failed");
+    return false;
+  }
+
+  m_pAudioCodec->Reset();
+  m_nDecodedLen = 0;
+  m_audioFrame = {};
+
+  if (!previousPassthrough->TransferMATStateTo(*currentPassthrough))
+    return false;
+
+  CLog::Log(LOGINFO,
+            "VideoPlayerCodec::PrepareRawSeamlessHandoverFrom - successor rewound and "
+            "previous MAT state adopted");
+  return true;
 }
 
 bool VideoPlayerCodec::Init(const CFileItem &file, unsigned int filecache)

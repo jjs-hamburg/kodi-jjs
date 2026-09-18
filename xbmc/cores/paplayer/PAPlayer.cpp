@@ -29,6 +29,7 @@
 #include "utils/log.h"
 #include "video/Bookmark.h"
 
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -718,6 +719,24 @@ inline void PAPlayer::ProcessStreams(double &freeBufferTime)
           // bookmark's delay accounting correct.
           CloseFileCB(*si);
 
+          const auto handoverStart = std::chrono::steady_clock::now();
+          const unsigned int handoverSpaceBefore = si->m_stream->GetSpace();
+          const double handoverDelayBeforeMs = si->m_stream->GetDelay() * 1000.0;
+
+          // The successor was pre-opened with a fresh MAT packer. At the clean
+          // TrueHD boundary, discard that speculative packetization and let the
+          // next track continue the still-partial MAT frame of the old track.
+          bool matContinuation = false;
+          if (si->m_audioFormat.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD)
+          {
+            matContinuation =
+                next->m_decoder.PrepareRawSeamlessHandoverFrom(si->m_decoder);
+            CLog::Log(
+                LOGINFO,
+                "PAPlayer::ProcessStreams - TrueHD MAT continuation at handover: {}",
+                matContinuation ? "active" : "unavailable; using primed successor packet");
+          }
+
           // Transfer the *same* running RAW stream to the already-opened
           // decoder of the next track.
           next->m_stream = std::move(si->m_stream);
@@ -729,35 +748,58 @@ inline void PAPlayer::ProcessStreams(double &freeBufferTime)
           *itt = next;
           m_currentStream = next;
 
-          // Keep the running RAW stream fed before doing any potentially slow
-          // old-decoder teardown or playback callbacks. The pending decoder
-          // already contains one primed RAW packet; append it immediately and
-          // opportunistically fill all currently available AE stream space.
+          // Keep the stream fed before any old-decoder teardown or callbacks.
+          // With MAT continuation, the successor was rewound and may need
+          // several quick ReadSamples() calls until the transferred partial MAT
+          // frame becomes a complete packet.
           unsigned int handoverPackets = 0;
-          if (QueueData(next))
-          {
-            ++handoverPackets;
+          unsigned int handoverReadCalls = 0;
 
-            while (next->m_stream->GetSpace() > 0)
+          auto queueAvailableRaw = [&]() -> bool
+          {
+            const int framesBefore = next->m_framesSent;
+            if (!QueueData(next))
+              return false;
+            if (next->m_framesSent != framesBefore)
+              ++handoverPackets;
+            return true;
+          };
+
+          if (queueAvailableRaw())
+          {
+            constexpr unsigned int MAX_HANDOVER_READS = 64;
+            while (next->m_stream->GetSpace() > 0 &&
+                   handoverReadCalls < MAX_HANDOVER_READS)
             {
               const int status = next->m_decoder.GetStatus();
               if (status == STATUS_ENDED || status == STATUS_NO_FILE)
                 break;
 
               const int readResult = next->m_decoder.ReadSamples(PACKET_SIZE);
-              if (readResult != RET_SUCCESS)
+              ++handoverReadCalls;
+              if (readResult == RET_ERROR)
                 break;
 
-              if (!QueueData(next))
+              if (!queueAvailableRaw())
                 break;
-
-              ++handoverPackets;
             }
           }
 
-          CLog::Log(LOGINFO,
-                    "PAPlayer::ProcessStreams - seamless RAW handover prefilled {} packet(s)",
-                    handoverPackets);
+          const auto handoverElapsedUs =
+              std::chrono::duration_cast<std::chrono::microseconds>(
+                  std::chrono::steady_clock::now() - handoverStart)
+                  .count();
+          const unsigned int handoverSpaceAfter = next->m_stream->GetSpace();
+          const double handoverDelayAfterMs = next->m_stream->GetDelay() * 1000.0;
+
+          CLog::Log(
+              LOGINFO,
+              "PAPlayer::ProcessStreams - seamless RAW handover prefill: MAT={}, "
+              "space {}->{}, delay {:.3f}->{:.3f} ms, reads {}, queued {} packet(s), "
+              "elapsed {} us",
+              matContinuation ? "continued" : "standalone", handoverSpaceBefore,
+              handoverSpaceAfter, handoverDelayBeforeMs, handoverDelayAfterMs,
+              handoverReadCalls, handoverPackets, handoverElapsedUs);
 
           UpdateGUIData(next);
 

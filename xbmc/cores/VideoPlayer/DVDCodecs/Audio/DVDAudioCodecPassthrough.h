@@ -36,6 +36,9 @@ public:
   std::string GetName() override { return m_codecName; }
   int GetBufferSize() override;
 
+  bool CanTransferMATStateTo(const CDVDAudioCodecPassthrough& target) const;
+  bool TransferMATStateTo(CDVDAudioCodecPassthrough& target);
+
 private:
   int GetData(uint8_t** dst);
   unsigned int PackTrueHD();

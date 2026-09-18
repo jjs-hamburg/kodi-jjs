@@ -45,6 +45,33 @@ CDVDAudioCodecPassthrough::~CDVDAudioCodecPassthrough(void)
   Dispose();
 }
 
+bool CDVDAudioCodecPassthrough::CanTransferMATStateTo(
+    const CDVDAudioCodecPassthrough& target) const
+{
+  return m_format.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD &&
+         target.m_format.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD &&
+         !m_deviceIsRAW && !target.m_deviceIsRAW && m_packerMAT && target.m_packerMAT;
+}
+
+bool CDVDAudioCodecPassthrough::TransferMATStateTo(CDVDAudioCodecPassthrough& target)
+{
+  if (!CanTransferMATStateTo(target))
+    return false;
+
+  CLog::Log(
+      LOGINFO,
+      "CDVDAudioCodecPassthrough::TransferMATStateTo - continuing MAT: source buffered {} "
+      "bytes / {} samples, padding {}, queued {}; discarding successor prebuffer state {} "
+      "bytes / {} samples, padding {}, queued {}",
+      m_packerMAT->GetBufferedBytes(), m_packerMAT->GetBufferedSamples(),
+      m_packerMAT->GetPendingPadding(), m_packerMAT->GetQueuedPacketCount(),
+      target.m_packerMAT->GetBufferedBytes(), target.m_packerMAT->GetBufferedSamples(),
+      target.m_packerMAT->GetPendingPadding(), target.m_packerMAT->GetQueuedPacketCount());
+
+  target.m_packerMAT = std::move(m_packerMAT);
+  return true;
+}
+
 bool CDVDAudioCodecPassthrough::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
 {
   m_parser.SetCoreOnly(false);
