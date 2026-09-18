@@ -1,9 +1,13 @@
 /*
  *  Copyright (C) 2024 Team Kodi
+ *  Copyright (C) 2010-2021 Hendrik Leppkes
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
  *  See LICENSES/README.md for more information.
+ *
+ *  The TrueHD seamless-branch padding carry-forward is derived from the
+ *  TrueHD MAT packer in LAV Filters by Hendrik Leppkes (Nevcairiel).
  */
 
 #include "PackerMAT.h"
@@ -85,10 +89,35 @@ bool CPackerMAT::PackTrueHD(const uint8_t* data, int size)
   {
     if (m_state.outputTimingValid && (info.outputTiming != m_state.outputTiming))
     {
-      CLog::Log(LOGWARNING,
-                "CPackerMAT::PackTrueHD: detected a stream discontinuity -> output timing "
+      CLog::Log(LOGINFO,
+                "CPackerMAT::PackTrueHD: seamless branch detected -> output timing "
                 "expected: {}, found: {}",
                 m_state.outputTiming, info.outputTiming);
+
+      // At a TrueHD seamless branch the frame timing restarts. Preserve the
+      // existing MAT stream and carry the required padding forward instead of
+      // letting the discontinuity grow into a packer reset/drop.
+      m_state.prevFrametimeValid = false;
+      spaceSize = frameSamples * (64 >> (m_state.ratebits & 7));
+
+      uint32_t prevOutput = static_cast<uint16_t>(info.outputTiming - frameSamples);
+      if (prevOutput < frameTime)
+        prevOutput += 0x10000u;
+
+      const int32_t currentFrameOutputOffset =
+          static_cast<int32_t>(prevOutput - frameTime);
+
+      if (m_state.nOutputTimeOffset >= currentFrameOutputOffset)
+      {
+        m_state.padding +=
+            (m_state.nOutputTimeOffset - currentFrameOutputOffset) *
+            (64 >> (m_state.ratebits & 7));
+      }
+
+      CLog::Log(LOGINFO,
+                "CPackerMAT::PackTrueHD: seamless branch carrying forward {} bytes padding "
+                "(offset {} -> {})",
+                m_state.padding, m_state.nOutputTimeOffset, currentFrameOutputOffset);
     }
     m_state.outputTiming = info.outputTiming;
     m_state.outputTimingValid = true;
@@ -117,6 +146,17 @@ bool CPackerMAT::PackTrueHD(const uint8_t* data, int size)
     m_buffer.clear();
     m_bufferCount = 0;
     return false;
+  }
+
+  // Remember the relation between TrueHD frame time and output timing. At a
+  // later seamless branch this lets us preserve the MAT slot alignment.
+  if (m_state.outputTimingValid)
+  {
+    uint32_t prevOutput = static_cast<uint16_t>(m_state.outputTiming - frameSamples);
+    if (prevOutput < frameTime)
+      prevOutput += 0x10000u;
+
+    m_state.nOutputTimeOffset = static_cast<int32_t>(prevOutput - frameTime);
   }
 
   // store frame time of the previous frame
@@ -293,9 +333,10 @@ int CPackerMAT::FillDataBuffer(const uint8_t* data, int size, Type type)
     if (type == Type::PADDING)
       remaining -= mat_middle_code.size();
 
-    // write remaining data after the MAT marker
+    // write remaining data after the MAT marker. For padding, data is nullptr;
+    // pointer arithmetic on nullptr is undefined, so keep it nullptr.
     if (remaining > 0)
-      remaining = FillDataBuffer(data + nBytesBefore, remaining, type);
+      remaining = FillDataBuffer(data ? data + nBytesBefore : nullptr, remaining, type);
 
     return remaining;
   }
@@ -367,6 +408,9 @@ TrueHDMajorSyncInfo CPackerMAT::ParseTrueHDMajorSyncHeaders(const uint8_t* p, in
     int extensionSize = p[30] >> 4; // calculate headers size
     majorSyncSize += 2 + extensionSize * 2;
   }
+
+  if (majorSyncSize > buffsize)
+    return {};
 
   CBitStream bs(p + 4, buffsize - 4);
 
