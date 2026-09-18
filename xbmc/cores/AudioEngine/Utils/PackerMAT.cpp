@@ -61,17 +61,20 @@ CPackerMAT::CPackerMAT()
 // high-bitrate streams can overshoot this size and therefor require proper handling of dynamic padding.
 bool CPackerMAT::PackTrueHD(const uint8_t* data, int size)
 {
-  TrueHDMajorSyncInfo info;
+  // Too small to contain the TrueHD timing/sync fields used below.
+  if (size < 10)
+    return false;
 
-  // get the ratebits and output timing from the sync frame
-  if (AV_RB32(data + 4) == FORMAT_MAJOR_SYNC)
+  TrueHDMajorSyncInfo info;
+  const bool isMajorSync = (AV_RB32(data + 4) == FORMAT_MAJOR_SYNC);
+
+  // Get ratebits and output timing from the sync frame. If the extended
+  // header parse fails, keep the frame and fall back to the basic ratebits
+  // field; seamless-branch detection is simply unavailable for that frame.
+  if (isMajorSync)
   {
     info = ParseTrueHDMajorSyncHeaders(data, size);
-
-    if (!info.valid)
-      return false;
-
-    m_state.ratebits = info.ratebits;
+    m_state.ratebits = info.valid ? info.ratebits : (data[8] >> 4);
   }
   else if (m_state.prevFrametimeValid == false)
   {
