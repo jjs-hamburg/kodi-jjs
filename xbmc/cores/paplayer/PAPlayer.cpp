@@ -1048,6 +1048,8 @@ inline bool PAPlayer::ProcessStream(StreamInfo *si, double &freeBufferTime)
   uint64_t sameFileTraceBoundary = 0;
   uint32_t sameFileTraceStreamId = 0;
   bool sameFileTransitioned = false;
+  bool sameFileSignalPlaybackStarted = false;
+  std::unique_ptr<CFileItem> sameFileCallbackFile;
   std::chrono::steady_clock::time_point sameFileTransitionStart{};
 
   int status = si->m_decoder.GetStatus();
@@ -1116,43 +1118,14 @@ inline bool PAPlayer::ProcessStream(StreamInfo *si, double &freeBufferTime)
 
       UpdateGUIData(si);
 
-      const auto sameFileCallbackStart = std::chrono::steady_clock::now();
-      const unsigned int sameFileSpaceBeforeCallbacks = si->m_stream->GetSpace();
-      const double sameFileDelayBeforeCallbacksMs = si->m_stream->GetDelay() * 1000.0;
-      if (sameFileTraceStreamId)
-      {
-        CTrueHDTrace::Record(
-            CTrueHDTrace::Stage::SAMEFILE_CALLBACK_BEGIN, sameFileTraceStreamId, 0, 0, 0,
-            sameFileSpaceBeforeCallbacks,
-            static_cast<int64_t>(sameFileDelayBeforeCallbacksMs * 1000.0));
-      }
-
-      if (m_signalStarted)
-        m_callback.OnPlayBackStarted(*si->m_fileItem);
+      // Same-file logical track changes reuse the running decoder and AE stream.
+      // Playback callbacks can block on GUI/application locks for seconds, so
+      // never execute them on the PAPlayer thread while RAW passthrough must
+      // continue feeding that stream. Capture the logical transition now,
+      // feed the stream first below, then dispatch callbacks on JobManager.
+      sameFileSignalPlaybackStarted = m_signalStarted;
       m_signalStarted = true;
-      m_callback.OnAVStarted(*si->m_fileItem);
-
-      const auto sameFileCallbackUs =
-          std::chrono::duration_cast<std::chrono::microseconds>(
-              std::chrono::steady_clock::now() - sameFileCallbackStart)
-              .count();
-      const unsigned int sameFileSpaceAfterCallbacks = si->m_stream->GetSpace();
-      const double sameFileDelayAfterCallbacksMs = si->m_stream->GetDelay() * 1000.0;
-      if (sameFileTraceStreamId)
-      {
-        CTrueHDTrace::Record(
-            CTrueHDTrace::Stage::SAMEFILE_CALLBACK_END, sameFileTraceStreamId, 0, 0, 0,
-            sameFileCallbackUs, sameFileSpaceAfterCallbacks,
-            static_cast<int64_t>(sameFileDelayAfterCallbacksMs * 1000.0));
-      }
-
-      CLog::Log(
-          LOGINFO,
-          "PAPlayer::ProcessStream - same-file callbacks: elapsed={} us, space {}->{}, "
-          "delay {:.3f}->{:.3f} ms",
-          sameFileCallbackUs, sameFileSpaceBeforeCallbacks, sameFileSpaceAfterCallbacks,
-          sameFileDelayBeforeCallbacksMs, sameFileDelayAfterCallbacksMs);
-
+      sameFileCallbackFile = std::make_unique<CFileItem>(*si->m_fileItem);
       sameFileTransitioned = true;
     }
     else
@@ -1187,6 +1160,46 @@ inline bool PAPlayer::ProcessStream(StreamInfo *si, double &freeBufferTime)
         "PAPlayer::ProcessStream - same-file first QueueData: ok={}, elapsed={} us, "
         "space={}, delay={:.3f} ms",
         queueDataOk, sameFileElapsedUs, sameFileSpaceAfterQueue, sameFileDelayAfterQueueMs);
+
+    if (sameFileCallbackFile)
+    {
+      IPlayerCallback* callback = &m_callback;
+      const CFileItem callbackFile(*sameFileCallbackFile);
+      const bool signalPlaybackStarted = sameFileSignalPlaybackStarted;
+      const uint32_t traceStreamId = sameFileTraceStreamId;
+
+      CServiceBroker::GetJobManager()->Submit(
+          [callback, callbackFile, signalPlaybackStarted, traceStreamId]()
+          {
+            const auto callbackStart = std::chrono::steady_clock::now();
+            if (traceStreamId)
+            {
+              CTrueHDTrace::Record(CTrueHDTrace::Stage::SAMEFILE_CALLBACK_BEGIN,
+                                   traceStreamId, 0, 0, 0);
+            }
+
+            CLog::Log(LOGINFO,
+                      "PAPlayer::ProcessStream - deferred same-file callbacks started");
+            if (signalPlaybackStarted)
+              callback->OnPlayBackStarted(callbackFile);
+            callback->OnAVStarted(callbackFile);
+
+            const auto callbackUs =
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::steady_clock::now() - callbackStart)
+                    .count();
+            if (traceStreamId)
+            {
+              CTrueHDTrace::Record(CTrueHDTrace::Stage::SAMEFILE_CALLBACK_END,
+                                   traceStreamId, 0, 0, 0, callbackUs);
+            }
+            CLog::Log(
+                LOGINFO,
+                "PAPlayer::ProcessStream - deferred same-file callbacks completed in {} us",
+                callbackUs);
+          },
+          CJob::PRIORITY_NORMAL);
+    }
 
     if (sameFileTraceBoundary)
     {
