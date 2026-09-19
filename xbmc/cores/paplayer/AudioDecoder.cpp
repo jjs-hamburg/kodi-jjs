@@ -14,7 +14,6 @@
 #include "ServiceBroker.h"
 #include "application/ApplicationComponents.h"
 #include "application/ApplicationVolumeHandling.h"
-#include "cores/AudioEngine/Utils/PackerMAT.h"
 #include "music/tags/MusicInfoTag.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
@@ -236,14 +235,6 @@ uint8_t *CAudioDecoder::GetRawData(int &size)
   if (m_rawBufferSize)
   {
     size = m_rawBufferSize;
-    const uint32_t traceStreamId = m_codec ? m_codec->GetTrueHDTraceStreamId() : 0;
-    if (traceStreamId)
-    {
-      CTrueHDTrace::Record(
-          CTrueHDTrace::Stage::DECODER_TAKE, traceStreamId, 0,
-          static_cast<uint32_t>(m_rawBufferSize),
-          CTrueHDTrace::Hash(m_rawBuffer, static_cast<std::size_t>(m_rawBufferSize)));
-    }
     m_rawBufferSize = 0;
     return m_rawBuffer;
   }
@@ -255,15 +246,6 @@ bool CAudioDecoder::PrepareRawSeamlessHandoverFrom(CAudioDecoder& previous)
   std::unique_lock<CCriticalSection> lock(m_critSection);
   if (!m_codec || !previous.m_codec)
     return false;
-
-  const uint32_t traceStreamId = m_codec->GetTrueHDTraceStreamId();
-  if (traceStreamId && m_rawBuffer && m_rawBufferSize)
-  {
-    CTrueHDTrace::Record(
-        CTrueHDTrace::Stage::DECODER_DISCARD, traceStreamId, 0,
-        static_cast<uint32_t>(m_rawBufferSize),
-        CTrueHDTrace::Hash(m_rawBuffer, static_cast<std::size_t>(m_rawBufferSize)));
-  }
 
   if (!m_codec->PrepareRawSeamlessHandoverFrom(previous.m_codec))
     return false;
@@ -342,14 +324,6 @@ int CAudioDecoder::ReadSamples(int numsamples)
       int result = m_codec->ReadRaw(&m_rawBuffer, &m_rawBufferSize);
       if (result == READ_SUCCESS && m_rawBufferSize)
       {
-        const uint32_t traceStreamId = m_codec ? m_codec->GetTrueHDTraceStreamId() : 0;
-        if (traceStreamId)
-        {
-          CTrueHDTrace::Record(
-              CTrueHDTrace::Stage::DECODER_FILL, traceStreamId, 0,
-              static_cast<uint32_t>(m_rawBufferSize),
-              CTrueHDTrace::Hash(m_rawBuffer, static_cast<std::size_t>(m_rawBufferSize)));
-        }
         //! @todo trash this useless ringbuffer
         if (m_status == STATUS_QUEUING)
         {
@@ -365,9 +339,6 @@ int CAudioDecoder::ReadSamples(int numsamples)
       }
       else if (result == READ_EOF)
       {
-        const uint32_t traceStreamId = m_codec ? m_codec->GetTrueHDTraceStreamId() : 0;
-        if (traceStreamId)
-          CTrueHDTrace::Record(CTrueHDTrace::Stage::DECODER_EOF, traceStreamId, 0, 0, 0);
         m_eof = true;
         // setup ending if we're within set time of the end (currently just EOF)
         if (m_status < STATUS_ENDING)

@@ -12,7 +12,6 @@
 #include "filesystem/File.h"
 #include "music/tags/MusicInfoTag.h"
 
-#include <cstdint>
 #include <string>
 
 #define READ_EOF      -1
@@ -64,7 +63,6 @@ public:
   // successor and adopt state from the previous decoder to keep packetization
   // continuous across a logical track boundary.
   virtual bool PrepareRawSeamlessHandoverFrom(ICodec* previous) { return false; }
-  virtual uint32_t GetTrueHDTraceStreamId() const { return 0; }
 
   // CanInit()
   // Should return true if the codec can be initialized

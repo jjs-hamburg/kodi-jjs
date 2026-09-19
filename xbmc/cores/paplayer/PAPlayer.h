@@ -124,6 +124,8 @@ private:
   CEvent              m_startEvent;          /* event for playback start */
   StreamInfo* m_currentStream = nullptr;
   StreamInfo* m_pendingRawStream = nullptr;  /* decoded/primed RAW successor; no AE stream yet */
+  StreamInfo* m_rawPrepareSource = nullptr;  /* source retained while RAW successor is primed */
+  bool m_forcePendingRawTransition = false;  /* manual next/previous: hand over once primed */
   IAudioCallback*     m_audioCallback;       /* the viz audio callback */
 
   CCriticalSection    m_streamsLock;         /* lock for the stream list */
@@ -135,7 +137,10 @@ private:
   int64_t m_newForcedTotalTime = -1;
   std::unique_ptr<CProcessInfo> m_processInfo;
 
-  bool QueueNextFileEx(const CFileItem &file, bool fadeIn);
+  bool QueueNextFileEx(const CFileItem& file,
+                       bool fadeIn,
+                       bool forceTransition = false,
+                       bool* formatChange = nullptr);
   bool CanReuseRawStream(const StreamInfo* current, const StreamInfo* next) const;
   void ClearPendingRawStream();
   void SoftStart(bool wait = false);

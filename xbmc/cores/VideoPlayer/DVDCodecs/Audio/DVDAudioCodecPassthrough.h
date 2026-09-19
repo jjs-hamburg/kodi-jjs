@@ -13,7 +13,6 @@
 #include "cores/AudioEngine/Utils/AEBitstreamPacker.h"
 #include "cores/AudioEngine/Utils/AEStreamInfo.h"
 
-#include <cstdint>
 #include <list>
 #include <memory>
 #include <vector>
@@ -39,7 +38,6 @@ public:
 
   bool CanTransferMATStateTo(const CDVDAudioCodecPassthrough& target) const;
   bool TransferMATStateTo(CDVDAudioCodecPassthrough& target);
-  void SetTrueHDTraceStreamId(uint32_t streamId);
 
 private:
   int GetData(uint8_t** dst);
@@ -62,5 +60,4 @@ private:
   unsigned int m_trueHDoffset = 0;
   unsigned int m_trueHDframes = 0;
   bool m_deviceIsRAW{false};
-  uint32_t m_traceStreamId{0};
 };

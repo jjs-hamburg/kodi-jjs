@@ -14,10 +14,8 @@
 
 #include "utils/log.h"
 
-#include <algorithm>
 #include <array>
 #include <assert.h>
-#include <atomic>
 #include <utility>
 
 extern "C"
@@ -46,158 +44,7 @@ constexpr std::array<uint8_t, 12> mat_middle_code = {0xC3, 0xC1, 0x42, 0x49, 0x3
 constexpr std::array<uint8_t, 24> mat_end_code = {0xC3, 0xC2, 0xC0, 0xC4, 0x00, 0x00, 0x00, 0x00,
                                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x97, 0x11,
                                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-
-constexpr std::size_t TRUEHD_TRACE_RING_SIZE = 16384;
-
-struct TrueHDTraceEvent
-{
-  uint64_t sequence{0};
-  CTrueHDTrace::Stage stage{CTrueHDTrace::Stage::DEMUX};
-  uint32_t streamId{0};
-  uint64_t itemId{0};
-  uint32_t size{0};
-  uint64_t hash{0};
-  int64_t value1{0};
-  int64_t value2{0};
-  int64_t value3{0};
-  int64_t value4{0};
-};
-
-struct TrueHDTraceSlot
-{
-  std::atomic<uint64_t> committed{0};
-  TrueHDTraceEvent event{};
-};
-
-std::array<TrueHDTraceSlot, TRUEHD_TRACE_RING_SIZE> g_trueHDTrace;
-std::atomic<uint64_t> g_trueHDTraceSequence{0};
-std::atomic<uint32_t> g_trueHDTraceStreamId{0};
-
-const char* TrueHDTraceStageName(CTrueHDTrace::Stage stage)
-{
-  switch (stage)
-  {
-    case CTrueHDTrace::Stage::DEMUX:
-      return "DEMUX";
-    case CTrueHDTrace::Stage::DEMUX_EOF:
-      return "DEMUX_EOF";
-    case CTrueHDTrace::Stage::PACK_IN:
-      return "PACK_IN";
-    case CTrueHDTrace::Stage::PACK_SKIP_NOSYNC:
-      return "PACK_SKIP_NOSYNC";
-    case CTrueHDTrace::Stage::MAT_FLUSH:
-      return "MAT_FLUSH";
-    case CTrueHDTrace::Stage::MAT_POP:
-      return "MAT_POP";
-    case CTrueHDTrace::Stage::MAT_TRANSFER:
-      return "MAT_TRANSFER";
-    case CTrueHDTrace::Stage::READRAW_OUT:
-      return "READRAW_OUT";
-    case CTrueHDTrace::Stage::READRAW_EMPTY:
-      return "READRAW_EMPTY";
-    case CTrueHDTrace::Stage::DECODER_FILL:
-      return "DECODER_FILL";
-    case CTrueHDTrace::Stage::DECODER_TAKE:
-      return "DECODER_TAKE";
-    case CTrueHDTrace::Stage::DECODER_DISCARD:
-      return "DECODER_DISCARD";
-    case CTrueHDTrace::Stage::DECODER_EOF:
-      return "DECODER_EOF";
-    case CTrueHDTrace::Stage::AE_ADD:
-      return "AE_ADD";
-    case CTrueHDTrace::Stage::SEEK:
-      return "SEEK";
-    case CTrueHDTrace::Stage::HANDOVER_BEGIN:
-      return "HANDOVER_BEGIN";
-    case CTrueHDTrace::Stage::HANDOVER_END:
-      return "HANDOVER_END";
-    case CTrueHDTrace::Stage::SAMEFILE_BEGIN:
-      return "SAMEFILE_BEGIN";
-    case CTrueHDTrace::Stage::SAMEFILE_CALLBACK_BEGIN:
-      return "SAMEFILE_CALLBACK_BEGIN";
-    case CTrueHDTrace::Stage::SAMEFILE_CALLBACK_END:
-      return "SAMEFILE_CALLBACK_END";
-    case CTrueHDTrace::Stage::SAMEFILE_QUEUE:
-      return "SAMEFILE_QUEUE";
-  }
-  return "UNKNOWN";
-}
 } // namespace
-
-uint32_t CTrueHDTrace::RegisterStream()
-{
-  return g_trueHDTraceStreamId.fetch_add(1, std::memory_order_relaxed) + 1;
-}
-
-uint64_t CTrueHDTrace::Hash(const uint8_t* data, std::size_t size)
-{
-  if (!data || size == 0)
-    return 0;
-
-  uint64_t hash = 1469598103934665603ULL;
-  for (std::size_t i = 0; i < size; ++i)
-  {
-    hash ^= data[i];
-    hash *= 1099511628211ULL;
-  }
-  return hash;
-}
-
-uint64_t CTrueHDTrace::Record(Stage stage,
-                              uint32_t streamId,
-                              uint64_t itemId,
-                              uint32_t size,
-                              uint64_t hash,
-                              int64_t value1,
-                              int64_t value2,
-                              int64_t value3,
-                              int64_t value4)
-{
-  const uint64_t sequence =
-      g_trueHDTraceSequence.fetch_add(1, std::memory_order_relaxed) + 1;
-  TrueHDTraceSlot& slot = g_trueHDTrace[sequence % TRUEHD_TRACE_RING_SIZE];
-  slot.committed.store(0, std::memory_order_relaxed);
-  slot.event = {sequence, stage, streamId, itemId, size, hash, value1, value2, value3, value4};
-  slot.committed.store(sequence, std::memory_order_release);
-  return sequence;
-}
-
-void CTrueHDTrace::DumpAround(uint64_t centerSequence,
-                              uint64_t eventsBefore,
-                              uint64_t eventsAfter)
-{
-  if (centerSequence == 0)
-    return;
-
-  const uint64_t first = centerSequence > eventsBefore ? centerSequence - eventsBefore : 1;
-  const uint64_t lastRequested = centerSequence + eventsAfter;
-  const uint64_t lastRecorded = g_trueHDTraceSequence.load(std::memory_order_acquire);
-  const uint64_t last = std::min(lastRequested, lastRecorded);
-
-  CLog::Log(LOGINFO,
-            "TRUEHDTRACE BEGIN center={} range={}..{} last-recorded={}",
-            centerSequence, first, last, lastRecorded);
-
-  for (uint64_t sequence = first; sequence <= last; ++sequence)
-  {
-    TrueHDTraceSlot& slot = g_trueHDTrace[sequence % TRUEHD_TRACE_RING_SIZE];
-    if (slot.committed.load(std::memory_order_acquire) != sequence)
-      continue;
-
-    const TrueHDTraceEvent event = slot.event;
-    if (slot.committed.load(std::memory_order_acquire) != sequence)
-      continue;
-
-    CLog::Log(LOGINFO,
-              "TRUEHDTRACE seq={} stage={} stream={} item={} size={} hash={:016x} "
-              "v1={} v2={} v3={} v4={}",
-              event.sequence, TrueHDTraceStageName(event.stage), event.streamId,
-              event.itemId, event.size, event.hash, event.value1, event.value2,
-              event.value3, event.value4);
-  }
-
-  CLog::Log(LOGINFO, "TRUEHDTRACE END center={}", centerSequence);
-}
 
 CPackerMAT::CPackerMAT()
 {
@@ -220,10 +67,6 @@ bool CPackerMAT::PackTrueHD(const uint8_t* data, int size)
 
   TrueHDMajorSyncInfo info;
   const bool isMajorSync = (AV_RB32(data + 4) == FORMAT_MAJOR_SYNC);
-  const uint16_t frameTime = AV_RB16(data + 2);
-  const uint64_t traceFrameSeq = ++m_traceFrameSeq;
-  const uint64_t traceHash =
-      m_traceStreamId ? CTrueHDTrace::Hash(data, static_cast<std::size_t>(size)) : 0;
 
   // Get ratebits and output timing from the sync frame. If the extended
   // header parse fails, keep the frame and fall back to the basic ratebits
@@ -235,26 +78,14 @@ bool CPackerMAT::PackTrueHD(const uint8_t* data, int size)
   }
   else if (m_state.prevFrametimeValid == false)
   {
-    if (m_traceStreamId)
-    {
-      CTrueHDTrace::Record(CTrueHDTrace::Stage::PACK_SKIP_NOSYNC, m_traceStreamId,
-                           traceFrameSeq, static_cast<uint32_t>(size), traceHash,
-                           frameTime, -1, GetCount(), m_state.padding);
-    }
     // only start streaming on a major sync frame
     m_state.numberOfSamplesOffset = 0;
     return false;
   }
 
+  const uint16_t frameTime = AV_RB16(data + 2);
   uint32_t spaceSize = 0;
   const uint16_t frameSamples = 40 << (m_state.ratebits & 7);
-  if (m_traceStreamId)
-  {
-    CTrueHDTrace::Record(CTrueHDTrace::Stage::PACK_IN, m_traceStreamId, traceFrameSeq,
-                         static_cast<uint32_t>(size), traceHash, frameTime,
-                         info.outputTimingPresent ? info.outputTiming : -1, GetCount(),
-                         m_state.padding);
-  }
   m_state.outputTiming += frameSamples;
 
   if (info.outputTimingPresent)
@@ -369,9 +200,6 @@ bool CPackerMAT::PackTrueHD(const uint8_t* data, int size)
   m_state.samples += frameSamples;
 
   // write actual audio data to the buffer
-  if (m_traceMatFirstFrameSeq == 0)
-    m_traceMatFirstFrameSeq = traceFrameSeq;
-  m_traceMatLastFrameSeq = traceFrameSeq;
   int remaining = FillDataBuffer(data, size, Type::DATA);
 
   // not all data could be written, or the buffer is full
@@ -384,8 +212,6 @@ bool CPackerMAT::PackTrueHD(const uint8_t* data, int size)
     {
       // setup a new buffer
       WriteHeader();
-      m_traceMatFirstFrameSeq = traceFrameSeq;
-      m_traceMatLastFrameSeq = traceFrameSeq;
 
       // and write the remaining data
       remaining = FillDataBuffer(data + (size - remaining), remaining, Type::DATA);
@@ -409,23 +235,9 @@ std::vector<uint8_t> CPackerMAT::GetOutputFrame()
   if (m_outputQueue.empty())
     return {};
 
-  TraceQueuedMAT traceMeta;
-  if (!m_traceOutputQueue.empty())
-  {
-    traceMeta = m_traceOutputQueue.front();
-    m_traceOutputQueue.pop_front();
-  }
-
   buffer = std::move(m_outputQueue.front());
-  m_outputQueue.pop_front();
 
-  if (traceMeta.streamId)
-  {
-    CTrueHDTrace::Record(CTrueHDTrace::Stage::MAT_POP, traceMeta.streamId,
-                         traceMeta.serial, static_cast<uint32_t>(buffer.size()),
-                         CTrueHDTrace::Hash(buffer.data(), buffer.size()),
-                         static_cast<int64_t>(m_outputQueue.size()));
-  }
+  m_outputQueue.pop_front();
 
   return buffer;
 }
@@ -570,20 +382,8 @@ void CPackerMAT::FlushPacket()
   const uint16_t frameSamples = 40 << (m_state.ratebits & 7);
   const uint32_t MATSamples = (frameSamples * 24);
 
-  const uint64_t traceMatSerial = ++m_traceMatSeq;
-  if (m_traceStreamId)
-  {
-    const uint64_t traceHash = CTrueHDTrace::Hash(m_buffer.data(), m_buffer.size());
-    CTrueHDTrace::Record(CTrueHDTrace::Stage::MAT_FLUSH, m_traceStreamId,
-                         traceMatSerial, static_cast<uint32_t>(m_buffer.size()), traceHash,
-                         static_cast<int64_t>(m_traceMatFirstFrameSeq),
-                         static_cast<int64_t>(m_traceMatLastFrameSeq), m_state.samples,
-                         m_state.numberOfSamplesOffset);
-  }
-
   // push MAT packet to output queue
   m_outputQueue.emplace_back(std::move(m_buffer));
-  m_traceOutputQueue.push_back({traceMatSerial, m_traceStreamId});
 
   // we expect 24 frames per MAT frame, so calculate an offset from that
   // this is done after delivery, because it modifies the duration of the frame,
@@ -595,8 +395,6 @@ void CPackerMAT::FlushPacket()
 
   m_buffer.clear();
   m_bufferCount = 0;
-  m_traceMatFirstFrameSeq = 0;
-  m_traceMatLastFrameSeq = 0;
 }
 
 TrueHDMajorSyncInfo CPackerMAT::ParseTrueHDMajorSyncHeaders(const uint8_t* p, int buffsize) const
