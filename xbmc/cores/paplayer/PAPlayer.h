@@ -108,6 +108,7 @@ private:
     bool m_isSlaved;                     /* true if the stream has been slaved to another */
     bool m_waitOnDrain;                  /* wait for stream being drained in AE */
     bool m_reachedEnd = false;            /* true only for a clean decoder/end-offset finish */
+    bool m_rawEofRevalidated = false;      /* true after one definitive EOF queue recheck */
   };
 
   typedef std::list<StreamInfo*> StreamList;

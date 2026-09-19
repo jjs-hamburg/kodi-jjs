@@ -807,18 +807,31 @@ inline void PAPlayer::ProcessStreams(double &freeBufferTime)
 
     // Automatic successor preparation is asynchronous. If a RAW source reaches
     // a clean boundary before a successor has actually been attached, never
-    // tear down the running AE stream. Request the next item if necessary and
-    // hold this exact stream until the request resolves. A known format change
-    // (m_waitOnDrain) and the real end of the playlist are the only exceptions.
+    // tear down the running AE stream. A previous OnNothingToQueueNotify()
+    // result is not sufficient here because it may belong to an earlier
+    // asynchronous prepare request. Revalidate "nothing to queue" exactly once
+    // at this stream's actual EOF before allowing the RAW session to close.
     if (processFailedOrFinished && si == m_currentStream && si->m_reachedEnd &&
         si->m_audioFormat.m_dataFormat == AE_FMT_RAW && !si->m_waitOnDrain &&
-        !m_isFinished && !m_pendingRawStream)
+        !m_pendingRawStream)
     {
-      m_rawPrepareSource = si;
-      if (!si->m_prepareTriggered)
+      const bool revalidateFinishedQueue = m_isFinished && !si->m_rawEofRevalidated;
+
+      if (!m_isFinished || revalidateFinishedQueue)
       {
-        si->m_prepareTriggered = true;
-        m_callback.OnQueueNextItem();
+        m_rawPrepareSource = si;
+
+        if (revalidateFinishedQueue)
+        {
+          si->m_rawEofRevalidated = true;
+          m_isFinished = false;
+          m_callback.OnQueueNextItem();
+        }
+        else if (!si->m_prepareTriggered)
+        {
+          si->m_prepareTriggered = true;
+          m_callback.OnQueueNextItem();
+        }
       }
     }
 
@@ -1100,6 +1113,7 @@ inline bool PAPlayer::ProcessStream(StreamInfo *si, double &freeBufferTime)
         si->m_prepareNextAtFrame = (int)((streamTotalTime - TIME_TO_CACHE_NEXT_FILE - m_defaultCrossfadeMS) * si->m_audioFormat.m_sampleRate / 1000.0f);
 
       si->m_prepareTriggered = false;
+      si->m_rawEofRevalidated = false;
       si->m_playNextAtFrame = 0;
       si->m_playNextTriggered = false;
       si->m_seekNextAtFrame = 0;
