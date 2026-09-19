@@ -53,6 +53,10 @@ public:
     SEEK,
     HANDOVER_BEGIN,
     HANDOVER_END,
+    SAMEFILE_BEGIN,
+    SAMEFILE_CALLBACK_BEGIN,
+    SAMEFILE_CALLBACK_END,
+    SAMEFILE_QUEUE,
   };
 
   static uint32_t RegisterStream();

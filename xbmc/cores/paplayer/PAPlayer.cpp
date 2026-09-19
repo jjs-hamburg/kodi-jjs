@@ -331,6 +331,12 @@ bool PAPlayer::QueueNextFileEx(const CFileItem &file, bool fadeIn)
         file.GetStartOffset() == m_currentStream->m_fileItem->GetEndOffset() && m_currentStream &&
         m_currentStream->m_prepareTriggered)
     {
+      CLog::Log(LOGINFO,
+                "PAPlayer::QueueNextFileEx - same-file logical transition armed: "
+                "current start={} end={}, next start={} end={}",
+                m_currentStream->m_fileItem->GetStartOffset(),
+                m_currentStream->m_fileItem->GetEndOffset(), file.GetStartOffset(),
+                file.GetEndOffset());
       m_currentStream->m_nextFileItem = std::make_unique<CFileItem>(file);
       m_upcomingCrossfadeMS = 0;
       return true;
@@ -1039,6 +1045,11 @@ inline bool PAPlayer::ProcessStream(StreamInfo *si, double &freeBufferTime)
     si->m_decoder.Seek(time);
   }
 
+  uint64_t sameFileTraceBoundary = 0;
+  uint32_t sameFileTraceStreamId = 0;
+  bool sameFileTransitioned = false;
+  std::chrono::steady_clock::time_point sameFileTransitionStart{};
+
   int status = si->m_decoder.GetStatus();
   const bool endOffsetReached =
       si->m_endOffset &&
@@ -1052,6 +1063,27 @@ inline bool PAPlayer::ProcessStream(StreamInfo *si, double &freeBufferTime)
   {
     if (si == m_currentStream && si->m_nextFileItem)
     {
+      sameFileTransitionStart = std::chrono::steady_clock::now();
+      sameFileTraceStreamId =
+          si->m_decoder.GetCodec() ? si->m_decoder.GetCodec()->GetTrueHDTraceStreamId() : 0;
+      const unsigned int sameFileSpaceBefore = si->m_stream->GetSpace();
+      const double sameFileDelayBeforeMs = si->m_stream->GetDelay() * 1000.0;
+      sameFileTraceBoundary =
+          sameFileTraceStreamId
+              ? CTrueHDTrace::Record(
+                    CTrueHDTrace::Stage::SAMEFILE_BEGIN, sameFileTraceStreamId, 0, 0, 0,
+                    sameFileSpaceBefore,
+                    static_cast<int64_t>(sameFileDelayBeforeMs * 1000.0), si->m_framesSent,
+                    endOffsetReached ? 1 : 0)
+              : 0;
+
+      CLog::Log(
+          LOGINFO,
+          "PAPlayer::ProcessStream - same-file logical boundary: status={}, endOffsetReached={}, "
+          "start={} end={}, framesSent={}, space={}, delay={:.3f} ms",
+          static_cast<int>(status), endOffsetReached, si->m_startOffset, si->m_endOffset,
+          si->m_framesSent, sameFileSpaceBefore, sameFileDelayBeforeMs);
+
       CloseFileCB(*si);
 
       // update current stream with info of next track
@@ -1083,10 +1115,45 @@ inline bool PAPlayer::ProcessStream(StreamInfo *si, double &freeBufferTime)
       UpdateStreamInfoPlayNextAtFrame(m_currentStream, m_upcomingCrossfadeMS);
 
       UpdateGUIData(si);
+
+      const auto sameFileCallbackStart = std::chrono::steady_clock::now();
+      const unsigned int sameFileSpaceBeforeCallbacks = si->m_stream->GetSpace();
+      const double sameFileDelayBeforeCallbacksMs = si->m_stream->GetDelay() * 1000.0;
+      if (sameFileTraceStreamId)
+      {
+        CTrueHDTrace::Record(
+            CTrueHDTrace::Stage::SAMEFILE_CALLBACK_BEGIN, sameFileTraceStreamId, 0, 0, 0,
+            sameFileSpaceBeforeCallbacks,
+            static_cast<int64_t>(sameFileDelayBeforeCallbacksMs * 1000.0));
+      }
+
       if (m_signalStarted)
         m_callback.OnPlayBackStarted(*si->m_fileItem);
       m_signalStarted = true;
       m_callback.OnAVStarted(*si->m_fileItem);
+
+      const auto sameFileCallbackUs =
+          std::chrono::duration_cast<std::chrono::microseconds>(
+              std::chrono::steady_clock::now() - sameFileCallbackStart)
+              .count();
+      const unsigned int sameFileSpaceAfterCallbacks = si->m_stream->GetSpace();
+      const double sameFileDelayAfterCallbacksMs = si->m_stream->GetDelay() * 1000.0;
+      if (sameFileTraceStreamId)
+      {
+        CTrueHDTrace::Record(
+            CTrueHDTrace::Stage::SAMEFILE_CALLBACK_END, sameFileTraceStreamId, 0, 0, 0,
+            sameFileCallbackUs, sameFileSpaceAfterCallbacks,
+            static_cast<int64_t>(sameFileDelayAfterCallbacksMs * 1000.0));
+      }
+
+      CLog::Log(
+          LOGINFO,
+          "PAPlayer::ProcessStream - same-file callbacks: elapsed={} us, space {}->{}, "
+          "delay {:.3f}->{:.3f} ms",
+          sameFileCallbackUs, sameFileSpaceBeforeCallbacks, sameFileSpaceAfterCallbacks,
+          sameFileDelayBeforeCallbacksMs, sameFileDelayAfterCallbacksMs);
+
+      sameFileTransitioned = true;
     }
     else
     {
@@ -1096,7 +1163,45 @@ inline bool PAPlayer::ProcessStream(StreamInfo *si, double &freeBufferTime)
     }
   }
 
-  if (!QueueData(si))
+  const bool queueDataOk = QueueData(si);
+
+  if (sameFileTransitioned)
+  {
+    const auto sameFileElapsedUs =
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - sameFileTransitionStart)
+            .count();
+    const unsigned int sameFileSpaceAfterQueue = si->m_stream->GetSpace();
+    const double sameFileDelayAfterQueueMs = si->m_stream->GetDelay() * 1000.0;
+
+    if (sameFileTraceStreamId)
+    {
+      CTrueHDTrace::Record(
+          CTrueHDTrace::Stage::SAMEFILE_QUEUE, sameFileTraceStreamId, 0, 0, 0,
+          queueDataOk ? 1 : 0, sameFileSpaceAfterQueue,
+          static_cast<int64_t>(sameFileDelayAfterQueueMs * 1000.0), sameFileElapsedUs);
+    }
+
+    CLog::Log(
+        LOGINFO,
+        "PAPlayer::ProcessStream - same-file first QueueData: ok={}, elapsed={} us, "
+        "space={}, delay={:.3f} ms",
+        queueDataOk, sameFileElapsedUs, sameFileSpaceAfterQueue, sameFileDelayAfterQueueMs);
+
+    if (sameFileTraceBoundary)
+    {
+      const uint64_t traceBoundary = sameFileTraceBoundary;
+      CServiceBroker::GetJobManager()->Submit(
+          [traceBoundary]()
+          {
+            std::this_thread::sleep_for(1s);
+            CTrueHDTrace::DumpAround(traceBoundary);
+          },
+          CJob::PRIORITY_NORMAL);
+    }
+  }
+
+  if (!queueDataOk)
     return false;
 
   /* update free buffer time if we are running */

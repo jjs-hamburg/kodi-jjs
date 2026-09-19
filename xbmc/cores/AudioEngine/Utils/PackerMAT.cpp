@@ -111,6 +111,14 @@ const char* TrueHDTraceStageName(CTrueHDTrace::Stage stage)
       return "HANDOVER_BEGIN";
     case CTrueHDTrace::Stage::HANDOVER_END:
       return "HANDOVER_END";
+    case CTrueHDTrace::Stage::SAMEFILE_BEGIN:
+      return "SAMEFILE_BEGIN";
+    case CTrueHDTrace::Stage::SAMEFILE_CALLBACK_BEGIN:
+      return "SAMEFILE_CALLBACK_BEGIN";
+    case CTrueHDTrace::Stage::SAMEFILE_CALLBACK_END:
+      return "SAMEFILE_CALLBACK_END";
+    case CTrueHDTrace::Stage::SAMEFILE_QUEUE:
+      return "SAMEFILE_QUEUE";
   }
   return "UNKNOWN";
 }
