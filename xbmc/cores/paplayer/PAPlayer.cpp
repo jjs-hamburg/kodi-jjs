@@ -515,6 +515,12 @@ bool PAPlayer::QueueNextFileEx(const CFileItem& file,
   {
     if (streamTotalTime >= TIME_TO_CACHE_NEXT_FILE + m_defaultCrossfadeMS)
       si->m_prepareNextAtFrame = (int)((streamTotalTime - TIME_TO_CACHE_NEXT_FILE - m_defaultCrossfadeMS) * si->m_audioFormat.m_sampleRate / 1000.0f);
+
+    // Some container/file combinations report no usable decoder duration.
+    // RAW gapless must not wait until EOF in that case: prepare the successor
+    // as soon as this stream actually starts feeding.
+    if (si->m_audioFormat.m_dataFormat == AE_FMT_RAW && si->m_prepareNextAtFrame == 0)
+      si->m_prepareNextAtFrame = 1;
   }
 
   bool rejectRawOverlap = false;
@@ -799,9 +805,23 @@ inline void PAPlayer::ProcessStreams(double &freeBufferTime)
     if (!streamFinishedByTransition && !forceRawTransition)
       processFailedOrFinished = !ProcessStream(si, freeBufferTime);
 
-    // Automatic successor preparation is asynchronous. If the source reaches
-    // a clean RAW boundary first, keep its decoder and the same AE stream alive
-    // until preparation completes instead of falling through to sink reopen.
+    // Automatic successor preparation is asynchronous. If a RAW source reaches
+    // a clean boundary before a successor has actually been attached, never
+    // tear down the running AE stream. Request the next item if necessary and
+    // hold this exact stream until the request resolves. A known format change
+    // (m_waitOnDrain) and the real end of the playlist are the only exceptions.
+    if (processFailedOrFinished && si == m_currentStream && si->m_reachedEnd &&
+        si->m_audioFormat.m_dataFormat == AE_FMT_RAW && !si->m_waitOnDrain &&
+        !m_isFinished && !m_pendingRawStream)
+    {
+      m_rawPrepareSource = si;
+      if (!si->m_prepareTriggered)
+      {
+        si->m_prepareTriggered = true;
+        m_callback.OnQueueNextItem();
+      }
+    }
+
     if (processFailedOrFinished && si == m_currentStream && si->m_reachedEnd &&
         m_rawPrepareSource == si && !m_pendingRawStream)
     {
@@ -1213,7 +1233,14 @@ void PAPlayer::OnExit()
 
 void PAPlayer::OnNothingToQueueNotify()
 {
+  std::unique_lock<CCriticalSection> lock(m_streamsLock);
   m_isFinished = true;
+
+  // A RAW stream may be deliberately held at EOF while the asynchronous
+  // playlist request is being resolved. If there really is no next item,
+  // release that hold so normal end-of-playlist cleanup can proceed.
+  if (m_rawPrepareSource == m_currentStream && m_currentStream && m_currentStream->m_reachedEnd)
+    m_rawPrepareSource = nullptr;
 }
 
 bool PAPlayer::IsPlaying() const

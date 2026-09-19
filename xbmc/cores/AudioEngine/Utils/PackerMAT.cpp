@@ -92,11 +92,6 @@ bool CPackerMAT::PackTrueHD(const uint8_t* data, int size)
   {
     if (m_state.outputTimingValid && (info.outputTiming != m_state.outputTiming))
     {
-      CLog::Log(LOGINFO,
-                "CPackerMAT::PackTrueHD: seamless branch detected -> output timing "
-                "expected: {}, found: {}",
-                m_state.outputTiming, info.outputTiming);
-
       // At a TrueHD seamless branch the frame timing restarts. Preserve the
       // existing MAT stream and carry the required padding forward instead of
       // letting the discontinuity grow into a packer reset/drop.
@@ -117,10 +112,6 @@ bool CPackerMAT::PackTrueHD(const uint8_t* data, int size)
             (64 >> (m_state.ratebits & 7));
       }
 
-      CLog::Log(LOGINFO,
-                "CPackerMAT::PackTrueHD: seamless branch carrying forward {} bytes padding "
-                "(offset {} -> {})",
-                m_state.padding, m_state.nOutputTimeOffset, currentFrameOutputOffset);
     }
     m_state.outputTiming = info.outputTiming;
     m_state.outputTimingValid = true;
