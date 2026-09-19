@@ -84,6 +84,9 @@ bool VideoPlayerCodec::PrepareRawSeamlessHandoverFrom(ICodec* previousCodec)
   if (!previousPassthrough->TransferMATStateTo(*currentPassthrough))
     return false;
 
+  CLog::Log(LOGINFO,
+            "VideoPlayerCodec::PrepareRawSeamlessHandoverFrom - successor rewound and "
+            "previous MAT state adopted");
   return true;
 }
 

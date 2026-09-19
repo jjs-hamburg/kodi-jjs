@@ -1,4 +1,4 @@
-APP_NAME Kodi
+APP_NAME Kodi JJS
 COMPANY_NAME XBMC Foundation
 DEV_NAME Team Kodi
 ABOUT_WEBSITE https://kodi.tv/about/
@@ -8,7 +8,7 @@ COPYRIGHT_YEARS 2005-2025
 WEBSITE http://kodi.tv
 VERSION_MAJOR 21
 VERSION_MINOR 2
-VERSION_TAG
+VERSION_TAG JJS.001
 VERSION_CODE 21.2.0
 ADDON_API 21.2.0
 ADDON_REPOS repository.xbmc.org|https://mirrors.kodi.tv
