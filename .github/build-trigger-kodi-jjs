@@ -1,0 +1,5 @@
+Kodi JJS Android build trigger
+Kodi source commit: 27bd60e5ad2be6b9b367eecfc5b7f0550057e260
+Kodi JJS build: JJS.002
+Audio baseline: JJS.001 / Android Build #22 / deff4c7a334a946e95daf1d1f7926db051cee33c
+Reason: retain RAW handover only while the source AE buffer still contains audio; otherwise use Kodi's normal cleanup/error path
