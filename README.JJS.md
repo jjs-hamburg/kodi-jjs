@@ -28,6 +28,13 @@ tracks.
   The upstream Kodi fix for chaptered audio ending too early is included as a
   separate change.
 
+- **Kodi-compatible failure fallback**  
+  A RAW source is retained at a clean track boundary only while its existing
+  AudioEngine buffer still contains audio. If an asynchronous successor is not
+  ready before that buffer drains — for example because an SMB open/read stalls —
+  Kodi JJS abandons the seamless handover and continues through Kodi's normal
+  stream-finish/error path. Kodi's network retries and timeouts are not changed.
+
 ## Android identity
 
 Android builds from this fork use:

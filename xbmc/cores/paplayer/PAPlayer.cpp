@@ -795,18 +795,40 @@ inline void PAPlayer::ProcessStreams(double &freeBufferTime)
         si->m_playNextTriggered && si->m_stream && !si->m_stream->IsFading();
     const bool forceRawTransition =
         si == m_currentStream && m_pendingRawStream && m_forcePendingRawTransition;
+    const bool waitingForRawSuccessor =
+        si == m_currentStream && si->m_reachedEnd && m_rawPrepareSource == si &&
+        !m_pendingRawStream;
 
-    if (!streamFinishedByTransition && !forceRawTransition)
+    // Once clean EOF has been reached while an asynchronous RAW successor is
+    // still being prepared, do not call ProcessStream() over and over. Apart
+    // from log spam there is no more source data to read.
+    if (waitingForRawSuccessor)
+      processFailedOrFinished = true;
+    else if (!streamFinishedByTransition && !forceRawTransition)
       processFailedOrFinished = !ProcessStream(si, freeBufferTime);
 
-    // Automatic successor preparation is asynchronous. If the source reaches
-    // a clean RAW boundary first, keep its decoder and the same AE stream alive
-    // until preparation completes instead of falling through to sink reopen.
+    // Automatic successor preparation is asynchronous. Keep the exact running
+    // AE stream alive only while it still contains buffered audio: during that
+    // interval a late successor can still be handed over without an audible
+    // break. If the AE buffer has drained before the successor is ready
+    // (for example because SMB open/read is stalled), seamless playback is no
+    // longer possible. Abandon the JJS hold and continue through Kodi's normal
+    // stream-finish/error cleanup path. Network retry and timeout behaviour is
+    // deliberately left entirely to Kodi.
     if (processFailedOrFinished && si == m_currentStream && si->m_reachedEnd &&
         m_rawPrepareSource == si && !m_pendingRawStream)
     {
-      freeBufferTime = 0.0;
-      return;
+      if (si->m_stream && si->m_stream->GetDelay() > 0.0)
+      {
+        freeBufferTime = 0.0;
+        return;
+      }
+
+      CLog::Log(
+          LOGWARNING,
+          "PAPlayer::ProcessStreams - RAW successor not ready after source buffer drained; "
+          "falling back to normal Kodi cleanup");
+      m_rawPrepareSource = nullptr;
     }
 
     /* if the stream is finishing */
