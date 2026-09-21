@@ -2,11 +2,6 @@ name: Build LibreELEC 12.0.2 Generic x86_64 JJS Gapless
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - master
-    paths:
-      - ".github/build-trigger-libreelec-jjs"
 
 permissions:
   contents: read
