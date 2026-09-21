@@ -92,6 +92,10 @@ jobs:
             's#https://gmplib.org/download/gmp/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://ftp.gnu.org/gnu/gmp/${PKG_NAME}-${PKG_VERSION}.tar.xz#' \
             LibreELEC.tv/packages/devel/gmp/package.mk
 
+          sed -i \
+            's#http://repo.or.cz/rtmpdump.git/snapshot/${PKG_VERSION}.tar.gz#https://mirrors.mit.edu/macports/distfiles/rtmpdump/${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/multimedia/rtmpdump/package.mk
+
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
 
@@ -247,6 +251,14 @@ jobs:
             's#https://gmplib.org/download/gmp/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://ftp.gnu.org/gnu/gmp/${PKG_NAME}-${PKG_VERSION}.tar.xz#' \
             LibreELEC.tv/packages/devel/gmp/package.mk
           grep '^PKG_URL=' LibreELEC.tv/packages/devel/gmp/package.mk
+
+          # repo.or.cz currently returns an HTML page for the pinned rtmpdump
+          # snapshot. MacPorts mirrors the exact 143043-byte archive with the
+          # same SHA256 already pinned by LibreELEC 12.0.2.
+          sed -i \
+            's#http://repo.or.cz/rtmpdump.git/snapshot/${PKG_VERSION}.tar.gz#https://mirrors.mit.edu/macports/distfiles/rtmpdump/${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/multimedia/rtmpdump/package.mk
+          grep '^PKG_URL=' LibreELEC.tv/packages/multimedia/rtmpdump/package.mk
 
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
