@@ -115,6 +115,49 @@ jobs:
           restore-keys: |
             libreelec-12.0.2-generic-x86_64-sources-
 
+      - name: Preflight all LibreELEC source downloads
+        if: steps.ccache_seed.outputs.cache-hit != 'true'
+        timeout-minutes: 45
+        working-directory: LibreELEC.tv
+        shell: bash
+        run: |
+          set -euo pipefail
+          PLAN="${RUNNER_TEMP}/libreelec-image-plan.json"
+          PKGS="${RUNNER_TEMP}/libreelec-image-packages.txt"
+
+          ./scripts/pkgjson | ./scripts/genbuildplan.py \
+            --with-json "$PLAN" --build image >/dev/null
+
+          python3 - "$PLAN" > "$PKGS" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as f:
+              plan = json.load(f)
+
+          seen = set()
+          for step in plan:
+              package = step["name"].split(":", 1)[0]
+              if package not in seen:
+                  seen.add(package)
+                  print(package)
+          PY
+
+          echo "Preflight source packages: $(wc -l < "$PKGS")"
+
+          failures=()
+          while IFS= read -r package; do
+            if ! ./scripts/get "$package"; then
+              failures+=("$package")
+            fi
+          done < "$PKGS"
+
+          if ((${#failures[@]})); then
+            printf 'Source preflight failed for %d package(s):\n' "${#failures[@]}" >&2
+            printf '  %s\n' "${failures[@]}" >&2
+            exit 1
+          fi
+
       - name: Verify LibreELEC build host
         if: steps.ccache_seed.outputs.cache-hit != 'true'
         working-directory: LibreELEC.tv
@@ -282,6 +325,48 @@ jobs:
           key: libreelec-12.0.2-generic-x86_64-sources-v1
           restore-keys: |
             libreelec-12.0.2-generic-x86_64-sources-
+
+      - name: Preflight all LibreELEC source downloads
+        timeout-minutes: 45
+        working-directory: LibreELEC.tv
+        shell: bash
+        run: |
+          set -euo pipefail
+          PLAN="${RUNNER_TEMP}/libreelec-image-plan.json"
+          PKGS="${RUNNER_TEMP}/libreelec-image-packages.txt"
+
+          ./scripts/pkgjson | ./scripts/genbuildplan.py \
+            --with-json "$PLAN" --build image >/dev/null
+
+          python3 - "$PLAN" > "$PKGS" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as f:
+              plan = json.load(f)
+
+          seen = set()
+          for step in plan:
+              package = step["name"].split(":", 1)[0]
+              if package not in seen:
+                  seen.add(package)
+                  print(package)
+          PY
+
+          echo "Preflight source packages: $(wc -l < "$PKGS")"
+
+          failures=()
+          while IFS= read -r package; do
+            if ! ./scripts/get "$package"; then
+              failures+=("$package")
+            fi
+          done < "$PKGS"
+
+          if ((${#failures[@]})); then
+            printf 'Source preflight failed for %d package(s):\n' "${#failures[@]}" >&2
+            printf '  %s\n' "${failures[@]}" >&2
+            exit 1
+          fi
 
       - name: Restore LibreELEC compiler cache
         uses: actions/cache/restore@v4
