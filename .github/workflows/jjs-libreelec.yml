@@ -100,6 +100,18 @@ jobs:
             's#https://code.videolan.org/videolan/${PKG_NAME}/-/archive/${PKG_VERSION}/${PKG_NAME}-${PKG_VERSION}.tar.gz#https://mirrors.kodi.tv/build-deps/sources/${PKG_NAME}-${PKG_VERSION}.tar.gz#' \
             LibreELEC.tv/packages/multimedia/libudfread/package.mk
 
+          sed -i \
+            's#http://www.freedesktop.org/software/pulseaudio/releases/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://na.edge.kernel.org/gentoo/distfiles/62/${PKG_NAME}-${PKG_VERSION}.tar.xz#' \
+            LibreELEC.tv/packages/audio/pulseaudio/package.mk
+
+          sed -i \
+            's#http://www.freedesktop.org/software/libevdev/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://mirrors.xmission.com/gentoo/distfiles/d4/${PKG_NAME}-${PKG_VERSION}.tar.xz#' \
+            LibreELEC.tv/packages/sysutils/libevdev/package.mk
+
+          sed -i \
+            's#https://github.com/alpharde/udevil/archive/${PKG_VERSION}.tar.gz#https://github.com/Arnie97/udevil-ng.git#' \
+            LibreELEC.tv/packages/sysutils/udevil/package.mk
+
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
 
@@ -314,6 +326,27 @@ jobs:
             's#https://code.videolan.org/videolan/${PKG_NAME}/-/archive/${PKG_VERSION}/${PKG_NAME}-${PKG_VERSION}.tar.gz#https://mirrors.kodi.tv/build-deps/sources/${PKG_NAME}-${PKG_VERSION}.tar.gz#' \
             LibreELEC.tv/packages/multimedia/libudfread/package.mk
           grep '^PKG_URL=' LibreELEC.tv/packages/multimedia/libudfread/package.mk
+
+          # freedesktop.org returns HTTP 418 to GitHub Actions for these two
+          # pinned release archives. Gentoo mirrors carry the same files; the
+          # LibreELEC SHA256 values remain unchanged and are verified by preflight.
+          sed -i \
+            's#http://www.freedesktop.org/software/pulseaudio/releases/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://na.edge.kernel.org/gentoo/distfiles/62/${PKG_NAME}-${PKG_VERSION}.tar.xz#' \
+            LibreELEC.tv/packages/audio/pulseaudio/package.mk
+          grep '^PKG_URL=' LibreELEC.tv/packages/audio/pulseaudio/package.mk
+
+          sed -i \
+            's#http://www.freedesktop.org/software/libevdev/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://mirrors.xmission.com/gentoo/distfiles/d4/${PKG_NAME}-${PKG_VERSION}.tar.xz#' \
+            LibreELEC.tv/packages/sysutils/libevdev/package.mk
+          grep '^PKG_URL=' LibreELEC.tv/packages/sysutils/libevdev/package.mk
+
+          # The old alpharde/udevil repository is gone. The exact pinned commit
+          # still exists in Arnie97/udevil-ng. Use LibreELEC's git source handler
+          # so the source is selected by the same commit SHA, not a changed tarball.
+          sed -i \
+            's#https://github.com/alpharde/udevil/archive/${PKG_VERSION}.tar.gz#https://github.com/Arnie97/udevil-ng.git#' \
+            LibreELEC.tv/packages/sysutils/udevil/package.mk
+          grep '^PKG_URL=' LibreELEC.tv/packages/sysutils/udevil/package.mk
 
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
