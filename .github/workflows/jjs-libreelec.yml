@@ -2,6 +2,11 @@ name: Build LibreELEC 12.0.2 Generic x86_64 JJS Gapless
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/build-trigger-libreelec-jjs"
 
 permissions:
   contents: read
@@ -353,8 +358,8 @@ jobs:
         shell: bash
         run: |
           set +e
-          timeout --foreground --signal=INT --kill-after=120s 320m make image
-          rc=$?
+          timeout --foreground --signal=INT --kill-after=120s 320m make image 2>&1 | tee "${GITHUB_WORKSPACE}/libreelec-build.log"
+          rc=${PIPESTATUS[0]}
           set -e
           if [ "$rc" -eq 0 ]; then
             echo "complete=true" >> "$GITHUB_OUTPUT"
@@ -380,6 +385,22 @@ jobs:
           set -x
           df -h /
           find LibreELEC.tv/target -maxdepth 1 -type f -printf '%f  %s bytes\n' 2>/dev/null | sort || true
+
+      - name: Prepare LibreELEC build diagnostics
+        if: steps.build_image.outputs.complete != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tail -n 1000 libreelec-build.log > libreelec-build-tail.log
+
+      - name: Upload LibreELEC build diagnostics
+        if: steps.build_image.outputs.complete != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: LibreELEC-JJS.002-build-diagnostics
+          path: libreelec-build-tail.log
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload LibreELEC update image
         if: steps.build_image.outputs.complete == 'true'
