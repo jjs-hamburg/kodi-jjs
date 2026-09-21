@@ -120,6 +120,16 @@ jobs:
           sed -i "s/^PKG_SHA256=.*/PKG_SHA256=\"$udevil_sha\"/" \
             LibreELEC.tv/packages/sysutils/udevil/package.mk
 
+          # LibreELEC 12.0.2 builds host tools with -march=native. That is not
+          # safe when ccache is restored on a different GitHub runner CPU:
+          # cached host objects may contain instructions unsupported by the next
+          # runner and crash with "Illegal instruction". Keep target flags
+          # untouched; make only host tools portable across x86_64 runners.
+          sed -i \
+            's/^HOST_CFLAGS="-march=native /HOST_CFLAGS="-march=x86-64 /' \
+            LibreELEC.tv/config/optimize
+          grep '^HOST_CFLAGS=' LibreELEC.tv/config/optimize
+
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
 
@@ -365,6 +375,16 @@ jobs:
             LibreELEC.tv/packages/sysutils/udevil/package.mk
           grep '^PKG_URL=' LibreELEC.tv/packages/sysutils/udevil/package.mk
           grep '^PKG_SHA256=' LibreELEC.tv/packages/sysutils/udevil/package.mk
+
+          # LibreELEC 12.0.2 builds host tools with -march=native. That is not
+          # safe when ccache is restored on a different GitHub runner CPU:
+          # cached host objects may contain instructions unsupported by the next
+          # runner and crash with "Illegal instruction". Keep target flags
+          # untouched; make only host tools portable across x86_64 runners.
+          sed -i \
+            's/^HOST_CFLAGS="-march=native /HOST_CFLAGS="-march=x86-64 /' \
+            LibreELEC.tv/config/optimize
+          grep '^HOST_CFLAGS=' LibreELEC.tv/config/optimize
 
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
