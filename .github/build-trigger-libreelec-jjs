@@ -1,0 +1,6 @@
+LibreELEC JJS diagnostic build trigger
+LibreELEC: 12.0.2 / f3fdd11916f8a47dc5a11c3a4c99cb7c7ffac78b
+Kodi JJS: 27bd60e5ad2be6b9b367eecfc5b7f0550057e260
+Kodi JJS build: JJS.002
+Target: Generic.x86_64
+Reason: capture tail of failing make image output without changing build logic
