@@ -112,6 +112,10 @@ jobs:
             's#https://github.com/alpharde/udevil/archive/${PKG_VERSION}.tar.gz#https://github.com/Arnie97/udevil-ng.git#' \
             LibreELEC.tv/packages/sysutils/udevil/package.mk
 
+          sed -i \
+            's/^  GET_HANDLER_SUPPORT="archive"$/  GET_HANDLER_SUPPORT="archive git"/' \
+            LibreELEC.tv/distributions/LibreELEC/options
+
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
 
@@ -346,6 +350,10 @@ jobs:
           sed -i \
             's#https://github.com/alpharde/udevil/archive/${PKG_VERSION}.tar.gz#https://github.com/Arnie97/udevil-ng.git#' \
             LibreELEC.tv/packages/sysutils/udevil/package.mk
+
+          sed -i \
+            's/^  GET_HANDLER_SUPPORT="archive"$/  GET_HANDLER_SUPPORT="archive git"/' \
+            LibreELEC.tv/distributions/LibreELEC/options
           grep '^PKG_URL=' LibreELEC.tv/packages/sysutils/udevil/package.mk
 
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
