@@ -96,6 +96,10 @@ jobs:
             's#http://repo.or.cz/rtmpdump.git/snapshot/${PKG_VERSION}.tar.gz#https://mirrors.mit.edu/macports/distfiles/rtmpdump/${PKG_VERSION}.tar.gz#' \
             LibreELEC.tv/packages/multimedia/rtmpdump/package.mk
 
+          sed -i \
+            's#https://code.videolan.org/videolan/${PKG_NAME}/-/archive/${PKG_VERSION}/${PKG_NAME}-${PKG_VERSION}.tar.gz#https://mirrors.kodi.tv/build-deps/sources/${PKG_NAME}-${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/multimedia/libudfread/package.mk
+
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
 
@@ -259,6 +263,14 @@ jobs:
             's#http://repo.or.cz/rtmpdump.git/snapshot/${PKG_VERSION}.tar.gz#https://mirrors.mit.edu/macports/distfiles/rtmpdump/${PKG_VERSION}.tar.gz#' \
             LibreELEC.tv/packages/multimedia/rtmpdump/package.mk
           grep '^PKG_URL=' LibreELEC.tv/packages/multimedia/rtmpdump/package.mk
+
+          # code.videolan.org currently serves an HTML page instead of the
+          # libudfread 1.1.2 archive. Kodi's build-deps mirror carries the
+          # exact 33744-byte archive with LibreELEC's pinned SHA256.
+          sed -i \
+            's#https://code.videolan.org/videolan/${PKG_NAME}/-/archive/${PKG_VERSION}/${PKG_NAME}-${PKG_VERSION}.tar.gz#https://mirrors.kodi.tv/build-deps/sources/${PKG_NAME}-${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/multimedia/libudfread/package.mk
+          grep '^PKG_URL=' LibreELEC.tv/packages/multimedia/libudfread/package.mk
 
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
