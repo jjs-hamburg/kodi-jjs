@@ -109,12 +109,16 @@ jobs:
             LibreELEC.tv/packages/sysutils/libevdev/package.mk
 
           sed -i \
-            's#https://github.com/alpharde/udevil/archive/${PKG_VERSION}.tar.gz#https://github.com/Arnie97/udevil-ng.git#' \
+            's#https://github.com/alpharde/udevil/archive/${PKG_VERSION}.tar.gz#https://github.com/Arnie97/udevil-ng/archive/${PKG_VERSION}.tar.gz#' \
             LibreELEC.tv/packages/sysutils/udevil/package.mk
-
-          sed -i \
-            's/^  GET_HANDLER_SUPPORT="archive"$/  GET_HANDLER_SUPPORT="archive git"/' \
-            LibreELEC.tv/distributions/LibreELEC/options
+          udevil_version="$(sed -n 's/^PKG_VERSION="\([^"]*\)"/\1/p' LibreELEC.tv/packages/sysutils/udevil/package.mk)"
+          udevil_url="https://github.com/Arnie97/udevil-ng/archive/${udevil_version}.tar.gz"
+          udevil_tmp="$(mktemp)"
+          wget -q --timeout=30 --tries=3 -O "$udevil_tmp" "$udevil_url"
+          udevil_sha="$(sha256sum "$udevil_tmp" | awk '{print $1}')"
+          rm -f "$udevil_tmp"
+          sed -i "s/^PKG_SHA256=.*/PKG_SHA256=\"$udevil_sha\"/" \
+            LibreELEC.tv/packages/sysutils/udevil/package.mk
 
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
@@ -345,16 +349,22 @@ jobs:
           grep '^PKG_URL=' LibreELEC.tv/packages/sysutils/libevdev/package.mk
 
           # The old alpharde/udevil repository is gone. The exact pinned commit
-          # still exists in Arnie97/udevil-ng. Use LibreELEC's git source handler
-          # so the source is selected by the same commit SHA, not a changed tarball.
+          # still exists in Arnie97/udevil-ng. Use GitHub's archive for that exact
+          # commit. The archive bytes differ because the repository name differs,
+          # so calculate that archive SHA before LibreELEC's preflight verifies it.
           sed -i \
-            's#https://github.com/alpharde/udevil/archive/${PKG_VERSION}.tar.gz#https://github.com/Arnie97/udevil-ng.git#' \
+            's#https://github.com/alpharde/udevil/archive/${PKG_VERSION}.tar.gz#https://github.com/Arnie97/udevil-ng/archive/${PKG_VERSION}.tar.gz#' \
             LibreELEC.tv/packages/sysutils/udevil/package.mk
-
-          sed -i \
-            's/^  GET_HANDLER_SUPPORT="archive"$/  GET_HANDLER_SUPPORT="archive git"/' \
-            LibreELEC.tv/distributions/LibreELEC/options
+          udevil_version="$(sed -n 's/^PKG_VERSION="\([^"]*\)"/\1/p' LibreELEC.tv/packages/sysutils/udevil/package.mk)"
+          udevil_url="https://github.com/Arnie97/udevil-ng/archive/${udevil_version}.tar.gz"
+          udevil_tmp="$(mktemp)"
+          wget -q --timeout=30 --tries=3 -O "$udevil_tmp" "$udevil_url"
+          udevil_sha="$(sha256sum "$udevil_tmp" | awk '{print $1}')"
+          rm -f "$udevil_tmp"
+          sed -i "s/^PKG_SHA256=.*/PKG_SHA256=\"$udevil_sha\"/" \
+            LibreELEC.tv/packages/sysutils/udevil/package.mk
           grep '^PKG_URL=' LibreELEC.tv/packages/sysutils/udevil/package.mk
+          grep '^PKG_SHA256=' LibreELEC.tv/packages/sysutils/udevil/package.mk
 
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
