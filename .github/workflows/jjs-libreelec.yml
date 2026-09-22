@@ -109,6 +109,10 @@ jobs:
             LibreELEC.tv/packages/sysutils/libevdev/package.mk
 
           sed -i \
+            's#http://linuxtv.org/downloads/v4l-utils/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://archive.ubuntu.com/ubuntu/pool/main/v/v4l-utils/v4l-utils_${PKG_VERSION}.orig.tar.xz#' \
+            LibreELEC.tv/packages/sysutils/v4l-utils/package.mk
+
+          sed -i \
             's#https://github.com/alpharde/udevil/archive/${PKG_VERSION}.tar.gz#https://github.com/Arnie97/udevil-ng/archive/${PKG_VERSION}.tar.gz#' \
             LibreELEC.tv/packages/sysutils/udevil/package.mk
           udevil_version="$(sed -n 's/^PKG_VERSION="\([^"]*\)"/\1/p' LibreELEC.tv/packages/sysutils/udevil/package.mk)"
@@ -356,6 +360,10 @@ jobs:
           sed -i \
             's#http://www.freedesktop.org/software/libevdev/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://mirrors.xmission.com/gentoo/distfiles/d4/${PKG_NAME}-${PKG_VERSION}.tar.xz#' \
             LibreELEC.tv/packages/sysutils/libevdev/package.mk
+
+          sed -i \
+            's#http://linuxtv.org/downloads/v4l-utils/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://archive.ubuntu.com/ubuntu/pool/main/v/v4l-utils/v4l-utils_${PKG_VERSION}.orig.tar.xz#' \
+            LibreELEC.tv/packages/sysutils/v4l-utils/package.mk
           grep '^PKG_URL=' LibreELEC.tv/packages/sysutils/libevdev/package.mk
 
           # The old alpharde/udevil repository is gone. The exact pinned commit
