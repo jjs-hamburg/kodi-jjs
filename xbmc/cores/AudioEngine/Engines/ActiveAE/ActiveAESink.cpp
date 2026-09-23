@@ -18,12 +18,29 @@
 #include "utils/log.h"
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <new> // for std::bad_alloc
 #include <sstream>
 
 using namespace AE;
 using namespace ActiveAE;
 using namespace std::chrono_literals;
+
+namespace
+{
+uint64_t JjsIecDiagHash(const uint8_t* data, std::size_t size)
+{
+  uint64_t hash = 1469598103934665603ULL;
+  for (std::size_t i = 0; i < size; ++i)
+  {
+    hash ^= data[i];
+    hash *= 1099511628211ULL;
+  }
+  return hash;
+}
+} // unnamed namespace
+
 
 CActiveAESink::CActiveAESink(CEvent* inMsgEvent)
   : CThread("AESink"),
@@ -1069,6 +1086,16 @@ unsigned int CActiveAESink::OutputSamples(CSampleBuffer* samples)
           break;
         default:
           break;
+      }
+
+      if (m_sinkFormat.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD && size > 0)
+      {
+        static uint64_t jjsIecDiagSeq = 0;
+        const uint64_t seq = ++jjsIecDiagSeq;
+        const uint64_t hash = JjsIecDiagHash(buffer[0], size);
+        CLog::Log(LOGINFO,
+                  "JJS IEC DIAG packed: seq={}, bytes={}, frames={}, hash={:016x}",
+                  seq, size, frames, hash);
       }
     }
     else // Android IEC packer (RAW)

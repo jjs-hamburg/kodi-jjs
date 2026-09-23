@@ -21,6 +21,8 @@
 #include "utils/log.h"
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <limits.h>
 #include <set>
 #include <sstream>
@@ -73,6 +75,17 @@ static unsigned int ALSASampleRateList[] =
 
 namespace
 {
+uint64_t JjsIecDiagHash(const uint8_t* data, std::size_t size)
+{
+  uint64_t hash = 1469598103934665603ULL;
+  for (std::size_t i = 0; i < size; ++i)
+  {
+    hash ^= data[i];
+    hash *= 1099511628211ULL;
+  }
+  return hash;
+}
+
 struct SndConfigDeleter
 {
   void operator()(snd_config_t* p) { snd_config_delete(p); }
@@ -913,6 +926,20 @@ unsigned int CAESinkALSA::AddPackets(uint8_t **data, unsigned int frames, unsign
   int64_t data_left = (int64_t) frames;
   int frames_written = 0;
 
+  const bool jjsIecDiag =
+      m_passthrough && m_format.m_sampleRate == 192000 &&
+      m_format.m_channelLayout.Count() == 8 && m_format.m_frameSize == 16;
+  uint64_t jjsIecDiagSeq = 0;
+  uint64_t jjsIecDiagHash = 0;
+  if (jjsIecDiag && frames > 0)
+  {
+    static uint64_t nextJjsIecDiagSeq = 0;
+    jjsIecDiagSeq = ++nextJjsIecDiagSeq;
+    jjsIecDiagHash = JjsIecDiagHash(
+        static_cast<const uint8_t*>(buffer),
+        static_cast<std::size_t>(frames) * m_format.m_frameSize);
+  }
+
   while (data_left > 0)
   {
     if (m_fragmented)
@@ -987,6 +1014,17 @@ unsigned int CAESinkALSA::AddPackets(uint8_t **data, unsigned int frames, unsign
     data_left -= ret;
     buffer = data[0]+offset*m_format.m_frameSize + frames_written*m_format.m_frameSize;
   }
+
+  if (jjsIecDiag)
+  {
+    CLog::Log(LOGINFO,
+              "JJS IEC DIAG ALSA wrote: seq={}, offset={}, requested={}, written={}, "
+              "bytes={}, hash={:016x}, fragmented={}",
+              jjsIecDiagSeq, offset, frames, frames_written,
+              static_cast<std::size_t>(frames) * m_format.m_frameSize,
+              jjsIecDiagHash, m_fragmented);
+  }
+
   return frames_written;
 }
 
