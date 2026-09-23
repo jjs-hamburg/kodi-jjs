@@ -852,8 +852,12 @@ inline void PAPlayer::ProcessStreams(double &freeBufferTime)
 
           CloseFileCB(*si);
 
+          const unsigned int handoverSpaceBefore = si->m_stream->GetSpace();
+          const double handoverDelayBeforeMs = si->m_stream->GetDelay() * 1000.0;
+
+          bool matContinuation = false;
           if (si->m_audioFormat.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD)
-            next->m_decoder.PrepareRawSeamlessHandoverFrom(si->m_decoder);
+            matContinuation = next->m_decoder.PrepareRawSeamlessHandoverFrom(si->m_decoder);
 
           // Same compatible RAW format means the exact running AE stream is
           // transferred. No sink recreation is permitted.
@@ -867,13 +871,23 @@ inline void PAPlayer::ProcessStreams(double &freeBufferTime)
           m_currentStream = next;
 
           // Feed successor data before decoder teardown or application callbacks.
-          auto queueAvailableRaw = [&]() -> bool { return QueueData(next); };
+          unsigned int handoverPackets = 0;
+          unsigned int handoverReadCalls = 0;
+          auto queueAvailableRaw = [&]() -> bool
+          {
+            const int framesBefore = next->m_framesSent;
+            if (!QueueData(next))
+              return false;
+            if (next->m_framesSent != framesBefore)
+              ++handoverPackets;
+            return true;
+          };
 
           if (queueAvailableRaw())
           {
             constexpr unsigned int MAX_HANDOVER_READS = 64;
-            for (unsigned int reads = 0;
-                 next->m_stream->GetSpace() > 0 && reads < MAX_HANDOVER_READS; ++reads)
+            while (next->m_stream->GetSpace() > 0 &&
+                   handoverReadCalls < MAX_HANDOVER_READS)
             {
               const int status = next->m_decoder.GetStatus();
               if (status == STATUS_ENDED || status == STATUS_NO_FILE)
@@ -882,10 +896,21 @@ inline void PAPlayer::ProcessStreams(double &freeBufferTime)
               if (next->m_decoder.ReadSamples(PACKET_SIZE) == RET_ERROR)
                 break;
 
+              ++handoverReadCalls;
               if (!queueAvailableRaw())
                 break;
             }
           }
+
+          const unsigned int handoverSpaceAfter = next->m_stream->GetSpace();
+          const double handoverDelayAfterMs = next->m_stream->GetDelay() * 1000.0;
+          CLog::Log(
+              LOGINFO,
+              "JJS DIAG RAW handover: MAT={}, space {}->{}, delay {:.3f}->{:.3f} ms, "
+              "reads {}, queued {} packet(s)",
+              matContinuation ? "continued" : "standalone", handoverSpaceBefore,
+              handoverSpaceAfter, handoverDelayBeforeMs, handoverDelayAfterMs,
+              handoverReadCalls, handoverPackets);
 
           UpdateGUIData(next);
 
