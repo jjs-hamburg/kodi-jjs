@@ -86,8 +86,6 @@ bool CPackerMAT::PackTrueHD(const uint8_t* data, int size)
   const uint16_t frameTime = AV_RB16(data + 2);
   uint32_t spaceSize = 0;
   const uint16_t frameSamples = 40 << (m_state.ratebits & 7);
-  int32_t discontinuityPadding = 0;
-  bool outputDiscontinuity = false;
   m_state.outputTiming += frameSamples;
 
   if (info.outputTimingPresent)
@@ -100,28 +98,29 @@ bool CPackerMAT::PackTrueHD(const uint8_t* data, int size)
                 m_state.outputTiming, info.outputTiming);
 
       // At a TrueHD seamless branch the frame timing restarts. Preserve the
-      // existing MAT stream and adjust the normal previous-frame padding by
-      // the signed output/input timing delta, matching FFmpeg's TrueHD MAT
-      // discontinuity handling. A positive delta change therefore reduces
-      // existing frame padding instead of being silently ignored.
+      // existing MAT stream and carry the required padding forward instead of
+      // letting the discontinuity grow into a packer reset/drop.
       m_state.prevFrametimeValid = false;
       spaceSize = frameSamples * (64 >> (m_state.ratebits & 7));
-      outputDiscontinuity = true;
 
-      const uint16_t prevOutput =
-          static_cast<uint16_t>(info.outputTiming - frameSamples);
+      uint32_t prevOutput = static_cast<uint16_t>(info.outputTiming - frameSamples);
+      if (prevOutput < frameTime)
+        prevOutput += 0x10000u;
+
       const int32_t currentFrameOutputOffset =
-          static_cast<int16_t>(prevOutput - frameTime);
+          static_cast<int32_t>(prevOutput - frameTime);
 
-      discontinuityPadding =
-          (m_state.nOutputTimeOffset - currentFrameOutputOffset) *
-          (64 >> (m_state.ratebits & 7));
+      if (m_state.nOutputTimeOffset >= currentFrameOutputOffset)
+      {
+        m_state.padding +=
+            (m_state.nOutputTimeOffset - currentFrameOutputOffset) *
+            (64 >> (m_state.ratebits & 7));
+      }
 
       CLog::Log(LOGINFO,
-                "CPackerMAT::PackTrueHD: seamless branch offset {} -> {}, "
-                "padding adjustment {} bytes",
-                m_state.nOutputTimeOffset, currentFrameOutputOffset,
-                discontinuityPadding);
+                "CPackerMAT::PackTrueHD: seamless branch carrying forward {} bytes padding "
+                "(offset {} -> {})",
+                m_state.padding, m_state.nOutputTimeOffset, currentFrameOutputOffset);
     }
     m_state.outputTiming = info.outputTiming;
     m_state.outputTimingValid = true;
@@ -138,23 +137,7 @@ bool CPackerMAT::PackTrueHD(const uint8_t* data, int size)
   if (spaceSize < m_state.prevMatFramesize)
     spaceSize = FFALIGN(m_state.prevMatFramesize, (64 >> (m_state.ratebits & 7)));
 
-  int64_t paddingToAdd =
-      static_cast<int64_t>(spaceSize) - m_state.prevMatFramesize;
-  if (outputDiscontinuity)
-    paddingToAdd += discontinuityPadding;
-
-  // Negative padding cannot be represented in the MAT carrier. As in
-  // FFmpeg's spdifenc TrueHD path, ignore the combined negative result
-  // instead of adding the unadjusted previous-frame padding.
-  if (paddingToAdd < 0)
-  {
-    CLog::Log(LOGINFO,
-              "CPackerMAT::PackTrueHD: seamless branch combined padding {} bytes ignored",
-              paddingToAdd);
-    paddingToAdd = 0;
-  }
-
-  m_state.padding += static_cast<uint32_t>(paddingToAdd);
+  m_state.padding += (spaceSize - m_state.prevMatFramesize);
 
   // detect seeks and re-initialize internal state i.e. skip stream
   // until the next major sync frame
@@ -172,10 +155,11 @@ bool CPackerMAT::PackTrueHD(const uint8_t* data, int size)
   // later seamless branch this lets us preserve the MAT slot alignment.
   if (m_state.outputTimingValid)
   {
-    const uint16_t prevOutput =
-        static_cast<uint16_t>(m_state.outputTiming - frameSamples);
-    m_state.nOutputTimeOffset =
-        static_cast<int16_t>(prevOutput - frameTime);
+    uint32_t prevOutput = static_cast<uint16_t>(m_state.outputTiming - frameSamples);
+    if (prevOutput < frameTime)
+      prevOutput += 0x10000u;
+
+    m_state.nOutputTimeOffset = static_cast<int32_t>(prevOutput - frameTime);
   }
 
   // store frame time of the previous frame
