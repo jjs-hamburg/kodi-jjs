@@ -251,7 +251,7 @@ jobs:
       LE_COMMIT: f3fdd11916f8a47dc5a11c3a4c99cb7c7ffac78b
       KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
       KODI_BASE: d1a1d48c3cb3722d39264ffdd8132f755ffecd27
-      KODI_JJS: 27bd60e5ad2be6b9b367eecfc5b7f0550057e260
+      KODI_JJS: 08f0d3238668a75d7fb15e0063262db10a25c276
       PROJECT: Generic
       DEVICE: Generic
       ARCH: x86_64
