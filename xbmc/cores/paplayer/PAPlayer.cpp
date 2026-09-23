@@ -364,12 +364,14 @@ bool PAPlayer::QueueNextFileEx(const CFileItem& file,
     *formatChange = false;
 
   StreamInfo* queueSource = nullptr;
+  bool queueSourceRaw = false;
   {
     std::unique_lock<CCriticalSection> lock(m_streamsLock);
     queueSource = m_currentStream;
 
     if (queueSource)
     {
+      queueSourceRaw = queueSource->m_audioFormat.m_dataFormat == AE_FMT_RAW;
       // Consecutive CUE/chapter items in one file already share decoder and
       // AE stream. A manual next/previous must switch immediately, so it uses
       // the normal seamless RAW handover below instead.
@@ -522,10 +524,13 @@ bool PAPlayer::QueueNextFileEx(const CFileItem& file,
   {
     std::unique_lock<CCriticalSection> lock(m_streamsLock);
 
-    // The successor is opened without holding m_streamsLock. If its source
-    // changed meanwhile, never fall through to PrepareStream(); that would
-    // silently create another RAW session and bypass seamless handover.
-    if (queueSource && m_currentStream != queueSource)
+    // The successor is opened without holding m_streamsLock. If a RAW
+    // transition changed source meanwhile, never fall through to PrepareStream();
+    // that would silently create another RAW session and bypass seamless handover.
+    // PCM -> PCM must retain Kodi's original behaviour even if preparation finishes
+    // after the previous PCM stream has ended.
+    if (queueSource && m_currentStream != queueSource &&
+        (queueSourceRaw || si->m_audioFormat.m_dataFormat == AE_FMT_RAW))
     {
       if (m_rawPrepareSource == queueSource)
         m_rawPrepareSource = nullptr;

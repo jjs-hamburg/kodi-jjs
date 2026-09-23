@@ -35,6 +35,7 @@ public:
   bool NeedPassthrough() override { return true; }
   std::string GetName() override { return m_codecName; }
   int GetBufferSize() override;
+  unsigned int GetPendingBacklogSize() const { return m_backlogSize; }
 
   bool CanTransferMATStateTo(const CDVDAudioCodecPassthrough& target) const;
   bool TransferMATStateTo(CDVDAudioCodecPassthrough& target);

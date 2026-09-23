@@ -466,6 +466,32 @@ int VideoPlayerCodec::ReadRaw(uint8_t **pBuffer, int *bufferSize)
 
   if (!pPacket)
   {
+    // At demux EOF the passthrough parser may still own backlog that has not
+    // reached the RAW/MAT output yet. Drain it before reporting EOF; otherwise
+    // the seamless handover can inherit a MAT timeline that is still behind the
+    // actual end of the source. Stop if the parser cannot make further progress.
+    auto* passthrough = dynamic_cast<CDVDAudioCodecPassthrough*>(m_pAudioCodec.get());
+    if (passthrough)
+    {
+      unsigned int backlogSize = passthrough->GetPendingBacklogSize();
+      while (backlogSize)
+      {
+        m_pAudioCodec->GetData(audioframe);
+        if (audioframe.nb_frames)
+        {
+          *bufferSize = audioframe.nb_frames;
+          *pBuffer = audioframe.data[0];
+          return READ_SUCCESS;
+        }
+
+        const unsigned int remaining = passthrough->GetPendingBacklogSize();
+        if (remaining >= backlogSize)
+          break;
+
+        backlogSize = remaining;
+      }
+    }
+
     return READ_EOF;
   }
   pPacket->pts = DVD_NOPTS_VALUE;
