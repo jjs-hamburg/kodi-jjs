@@ -251,7 +251,7 @@ jobs:
       LE_COMMIT: f3fdd11916f8a47dc5a11c3a4c99cb7c7ffac78b
       KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
       KODI_BASE: d1a1d48c3cb3722d39264ffdd8132f755ffecd27
-      KODI_JJS: 08f0d3238668a75d7fb15e0063262db10a25c276
+      KODI_JJS: 2bc9612ecf43b504f171e6263e3dd12607aa16c9
       PROJECT: Generic
       DEVICE: Generic
       ARCH: x86_64
@@ -471,6 +471,7 @@ jobs:
 
           git -C kodi-jjs diff --binary --no-ext-diff "${KODI_BASE}" "${KODI_JJS}" -- \
             xbmc/application/ApplicationPlayer.cpp \
+            xbmc/cores/AudioEngine/Sinks/AESinkALSA.cpp \
             xbmc/cores/AudioEngine/Utils/PackerMAT.cpp \
             xbmc/cores/AudioEngine/Utils/PackerMAT.h \
             xbmc/cores/VideoPlayer/DVDCodecs/Audio/DVDAudioCodecPassthrough.cpp \
