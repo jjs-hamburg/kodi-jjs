@@ -19,7 +19,7 @@ jobs:
     env:
       KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
       KODI_REF: 21.2-Omega-jjs
-      EXPECTED_KODI_COMMIT: b6e9ff0e932ed7b82be2e784a0df5a3de19d8d48
+      EXPECTED_KODI_COMMIT: 830ccd8836408cc64715c3db3409f59ddcec49f9
       EXPECTED_INTERNAL_APP_NAME: Kodi
       EXPECTED_DISPLAY_NAME: Kodi JJS
       EXPECTED_PACKAGE: org.jjs.kodi
