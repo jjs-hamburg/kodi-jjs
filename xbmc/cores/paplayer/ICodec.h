@@ -59,6 +59,11 @@ public:
 
   virtual int ReadRaw(uint8_t **pBuffer, int *bufferSize) { return READ_ERROR; }
 
+  // Optional RAW passthrough handover hook. Implementations may rewind their
+  // successor and adopt state from the previous decoder to keep packetization
+  // continuous across a logical track boundary.
+  virtual bool PrepareRawSeamlessHandoverFrom(ICodec* previous) { return false; }
+
   // CanInit()
   // Should return true if the codec can be initialized
   // eg. check if a dll needed for the codec exists

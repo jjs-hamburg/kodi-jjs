@@ -30,6 +30,7 @@ public:
   int ReadRaw(uint8_t **pBuffer, int *bufferSize) override;
   bool CanInit() override;
   bool CanSeek() override;
+  bool PrepareRawSeamlessHandoverFrom(ICodec* previous) override;
 
   void DeInit();
   AEAudioFormat GetFormat();

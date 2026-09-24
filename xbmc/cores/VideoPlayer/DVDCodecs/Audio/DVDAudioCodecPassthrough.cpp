@@ -45,6 +45,23 @@ CDVDAudioCodecPassthrough::~CDVDAudioCodecPassthrough(void)
   Dispose();
 }
 
+bool CDVDAudioCodecPassthrough::CanTransferMATStateTo(
+    const CDVDAudioCodecPassthrough& target) const
+{
+  return m_format.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD &&
+         target.m_format.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD &&
+         !m_deviceIsRAW && !target.m_deviceIsRAW && m_packerMAT && target.m_packerMAT;
+}
+
+bool CDVDAudioCodecPassthrough::TransferMATStateTo(CDVDAudioCodecPassthrough& target)
+{
+  if (!CanTransferMATStateTo(target))
+    return false;
+
+  target.m_packerMAT = std::move(m_packerMAT);
+  return true;
+}
+
 bool CDVDAudioCodecPassthrough::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
 {
   m_parser.SetCoreOnly(false);

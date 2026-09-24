@@ -62,6 +62,7 @@ public:
   unsigned int GetDataSize(bool checkPktSize);
   void *GetData(unsigned int samples);
   uint8_t* GetRawData(int &size);
+  bool PrepareRawSeamlessHandoverFrom(CAudioDecoder& previous);
   ICodec *GetCodec() const { return m_codec; }
   float GetReplayGain(float &peakVal);
 

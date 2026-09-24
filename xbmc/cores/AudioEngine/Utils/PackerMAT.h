@@ -1,9 +1,13 @@
 /*
  *  Copyright (C) 2024 Team Kodi
+ *  Copyright (C) 2010-2021 Hendrik Leppkes
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
  *  See LICENSES/README.md for more information.
+ *
+ *  The TrueHD seamless-branch padding carry-forward is derived from the
+ *  TrueHD MAT packer in LAV Filters by Hendrik Leppkes (Nevcairiel).
  */
 
 #pragma once
@@ -35,6 +39,14 @@ public:
   bool PackTrueHD(const uint8_t* data, int size);
   std::vector<uint8_t> GetOutputFrame();
 
+  uint32_t GetBufferedBytes() const { return m_bufferCount; }
+  uint32_t GetBufferedSamples() const { return m_state.samples; }
+  uint32_t GetPendingPadding() const { return m_state.padding; }
+  uint32_t GetQueuedPacketCount() const
+  {
+    return static_cast<uint32_t>(m_outputQueue.size());
+  }
+
 private:
   struct MATState
   {
@@ -63,6 +75,11 @@ private:
     uint32_t prevMatFramesize; // size in bytes of previous MAT frame
 
     uint32_t padding; // padding bytes pending to write
+
+    // Frame-time to output-time offset used to keep MAT slot alignment across
+    // TrueHD seamless branch points.
+    int32_t nOutputTimeOffset;
+
     uint32_t samples; // number of samples accumulated in current MAT frame
     int numberOfSamplesOffset; // offset respect number of samples in a standard MAT frame (40 * 24)
   };

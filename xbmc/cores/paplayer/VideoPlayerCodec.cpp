@@ -14,6 +14,7 @@
 #include "cores/AudioEngine/Interfaces/AE.h"
 #include "cores/AudioEngine/Utils/AEUtil.h"
 #include "cores/VideoPlayer/DVDCodecs/DVDFactoryCodec.h"
+#include "cores/VideoPlayer/DVDCodecs/Audio/DVDAudioCodecPassthrough.h"
 #include "cores/VideoPlayer/DVDDemuxers/DVDDemuxUtils.h"
 #include "cores/VideoPlayer/DVDDemuxers/DVDFactoryDemuxer.h"
 #include "cores/VideoPlayer/DVDInputStreams/DVDFactoryInputStream.h"
@@ -51,6 +52,42 @@ void VideoPlayerCodec::SetContentType(const std::string &strContent)
 void  VideoPlayerCodec::SetPassthroughStreamType(CAEStreamInfo::DataType streamType)
 {
   m_srcFormat.m_streamInfo.m_type = streamType;
+}
+
+bool VideoPlayerCodec::PrepareRawSeamlessHandoverFrom(ICodec* previousCodec)
+{
+  auto* previous = dynamic_cast<VideoPlayerCodec*>(previousCodec);
+  if (!previous || !m_pDemuxer || !m_pAudioCodec || !previous->m_pAudioCodec)
+    return false;
+
+  auto* currentPassthrough =
+      dynamic_cast<CDVDAudioCodecPassthrough*>(m_pAudioCodec.get());
+  auto* previousPassthrough =
+      dynamic_cast<CDVDAudioCodecPassthrough*>(previous->m_pAudioCodec.get());
+
+  if (!currentPassthrough || !previousPassthrough ||
+      !previousPassthrough->CanTransferMATStateTo(*currentPassthrough))
+    return false;
+
+  bool seekback = true;
+  if (!m_pDemuxer->SeekTime(0, seekback))
+  {
+    CLog::Log(LOGWARNING,
+              "VideoPlayerCodec::PrepareRawSeamlessHandoverFrom - successor rewind failed");
+    return false;
+  }
+
+  m_pAudioCodec->Reset();
+  m_nDecodedLen = 0;
+  m_audioFrame = {};
+
+  if (!previousPassthrough->TransferMATStateTo(*currentPassthrough))
+    return false;
+
+  CLog::Log(LOGINFO,
+            "VideoPlayerCodec::PrepareRawSeamlessHandoverFrom - successor rewound and "
+            "previous MAT state adopted");
+  return true;
 }
 
 bool VideoPlayerCodec::Init(const CFileItem &file, unsigned int filecache)
@@ -408,11 +445,17 @@ int VideoPlayerCodec::ReadRaw(uint8_t **pBuffer, int *bufferSize)
   DemuxPacket* pPacket;
 
   m_nDecodedLen = 0;
+  *pBuffer = nullptr;
+  *bufferSize = 0;
   DVDAudioFrame audioframe;
 
+  // A complete RAW packet can already be waiting in codec/parser backlog.
+  // Return it before reading another demux packet.
   m_pAudioCodec->GetData(audioframe);
   if (audioframe.nb_frames)
   {
+    *bufferSize = audioframe.nb_frames;
+    *pBuffer = audioframe.data[0];
     return READ_SUCCESS;
   }
 
@@ -423,6 +466,32 @@ int VideoPlayerCodec::ReadRaw(uint8_t **pBuffer, int *bufferSize)
 
   if (!pPacket)
   {
+    // At demux EOF the passthrough parser may still own backlog that has not
+    // reached the RAW/MAT output yet. Drain it before reporting EOF; otherwise
+    // the seamless handover can inherit a MAT timeline that is still behind the
+    // actual end of the source. Stop if the parser cannot make further progress.
+    auto* passthrough = dynamic_cast<CDVDAudioCodecPassthrough*>(m_pAudioCodec.get());
+    if (passthrough)
+    {
+      unsigned int backlogSize = passthrough->GetPendingBacklogSize();
+      while (backlogSize)
+      {
+        m_pAudioCodec->GetData(audioframe);
+        if (audioframe.nb_frames)
+        {
+          *bufferSize = audioframe.nb_frames;
+          *pBuffer = audioframe.data[0];
+          return READ_SUCCESS;
+        }
+
+        const unsigned int remaining = passthrough->GetPendingBacklogSize();
+        if (remaining >= backlogSize)
+          break;
+
+        backlogSize = remaining;
+      }
+    }
+
     return READ_EOF;
   }
   pPacket->pts = DVD_NOPTS_VALUE;
@@ -439,10 +508,6 @@ int VideoPlayerCodec::ReadRaw(uint8_t **pBuffer, int *bufferSize)
   {
     *bufferSize = audioframe.nb_frames;
     *pBuffer = audioframe.data[0];
-  }
-  else
-  {
-    *bufferSize = 0;
   }
 
   return READ_SUCCESS;

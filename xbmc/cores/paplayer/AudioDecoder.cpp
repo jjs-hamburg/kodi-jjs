@@ -241,6 +241,20 @@ uint8_t *CAudioDecoder::GetRawData(int &size)
   return nullptr;
 }
 
+bool CAudioDecoder::PrepareRawSeamlessHandoverFrom(CAudioDecoder& previous)
+{
+  std::unique_lock<CCriticalSection> lock(m_critSection);
+  if (!m_codec || !previous.m_codec)
+    return false;
+
+  if (!m_codec->PrepareRawSeamlessHandoverFrom(previous.m_codec))
+    return false;
+
+  m_rawBuffer = nullptr;
+  m_rawBufferSize = 0;
+  return true;
+}
+
 int CAudioDecoder::ReadSamples(int numsamples)
 {
   if (m_status == STATUS_NO_FILE || m_status == STATUS_ENDING || m_status == STATUS_ENDED)

@@ -920,6 +920,30 @@ unsigned int CAESinkALSA::AddPackets(uint8_t **data, unsigned int frames, unsign
     else // take care as we can come here a second time if the sink does not eat all data
       amount = (unsigned int) data_left;
 
+    const snd_pcm_state_t stateBefore = snd_pcm_state(m_pcm);
+    const snd_pcm_sframes_t availBefore = snd_pcm_avail_update(m_pcm);
+    const unsigned int lowQueuedFrames =
+        std::min(m_bufferSize, 2U * m_originalPeriodSize);
+    const snd_pcm_sframes_t lowAvailThreshold =
+        static_cast<snd_pcm_sframes_t>(m_bufferSize - lowQueuedFrames);
+    const bool logDiag =
+        stateBefore != SND_PCM_STATE_RUNNING ||
+        availBefore < 0 ||
+        availBefore >= lowAvailThreshold;
+
+    if (logDiag)
+    {
+      snd_pcm_sframes_t delayBefore = 0;
+      const int delayRet = snd_pcm_delay(m_pcm, &delayBefore);
+      CLog::Log(
+          LOGINFO,
+          "JJS ALSA DIAG before write: state={}, avail={} frames, delay={} frames "
+          "({:.3f} ms), delayRet={}, buffer={}, period={}, request={}, offset={}",
+          snd_pcm_state_name(stateBefore), availBefore, delayBefore,
+          static_cast<double>(delayBefore) * m_formatSampleRateMul * 1000.0,
+          delayRet, m_bufferSize, m_originalPeriodSize, amount, offset + frames_written);
+    }
+
     int ret = snd_pcm_writei(m_pcm, buffer, amount);
     if (ret < 0)
     {
@@ -940,6 +964,21 @@ unsigned int CAESinkALSA::AddPackets(uint8_t **data, unsigned int frames, unsign
 
     if ( ret > 0 && snd_pcm_state(m_pcm) == SND_PCM_STATE_PREPARED)
       snd_pcm_start(m_pcm);
+
+    if (logDiag)
+    {
+      const snd_pcm_state_t stateAfter = snd_pcm_state(m_pcm);
+      const snd_pcm_sframes_t availAfter = snd_pcm_avail_update(m_pcm);
+      snd_pcm_sframes_t delayAfter = 0;
+      const int delayRet = snd_pcm_delay(m_pcm, &delayAfter);
+      CLog::Log(
+          LOGINFO,
+          "JJS ALSA DIAG after write: state={}, avail={} frames, delay={} frames "
+          "({:.3f} ms), delayRet={}, wrote={}",
+          snd_pcm_state_name(stateAfter), availAfter, delayAfter,
+          static_cast<double>(delayAfter) * m_formatSampleRateMul * 1000.0,
+          delayRet, ret);
+    }
 
     if (ret <= 0)
       break;

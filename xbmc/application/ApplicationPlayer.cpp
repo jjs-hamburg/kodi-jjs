@@ -105,7 +105,8 @@ bool CApplicationPlayer::OpenFile(const CFileItem& item, const CPlayerOptions& o
     if (player->m_name != newPlayer)
       needToClose = true;
 
-    if (player->m_type != "video" && player->m_type != "remote")
+    if (player->m_type != "video" && player->m_type != "remote" &&
+        player->m_type != "music")
       needToClose = true;
 
     if (needToClose)
