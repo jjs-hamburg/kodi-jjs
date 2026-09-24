@@ -1,5 +1,22 @@
 ![Kodi Logo](docs/resources/banner.png)
 
+## About Kodi JJS
+
+Kodi JJS is a personal fork of Kodi 21.3 Omega created to improve gapless playback of Dolby TrueHD / Atmos material when using RAW passthrough.
+
+In standard Kodi, playback of consecutive TrueHD / Atmos tracks may tear down and recreate the RAW AudioEngine stream at a track boundary. Even when the following track uses the same compatible output format, this can force the HDMI receiver to resynchronize and produce an audible gap.
+
+Kodi JJS changes this behaviour for compatible consecutive RAW streams. Instead of closing and reopening the audio path, the existing AudioEngine / RAW stream is kept alive and handed over to the next track. TrueHD MAT state is preserved across the transition as well. If the actual RAW output format changes, Kodi's normal drain and reopen behaviour is still used.
+
+The intention is simple: a track change should not interrupt the HDMI audio stream when there is no technical reason to recreate it.
+
+This fork was originally created for my own personal use. I am making the source code and builds available for anyone who may find them useful, but this is not an official Kodi project and comes without any warranty, support commitment, or obligation to provide future updates or maintenance.
+
+Kodi itself is developed by Team Kodi and remains licensed under the GNU GPL.
+
+For technical details about the JJS changes, see [README.JJS.md](README.JJS.md).
+
+
 <p align="center">
   <strong>
     <a href="https://kodi.tv/">website</a>
