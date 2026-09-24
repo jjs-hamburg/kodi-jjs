@@ -98,10 +98,8 @@ bool CPackerMAT::PackTrueHD(const uint8_t* data, int size)
                 m_state.outputTiming, info.outputTiming);
 
       // At a TrueHD seamless branch the frame timing restarts. Preserve the
-      // existing MAT stream and calculate the previous-frame padding together
-      // with the signed output/input timing correction. This mirrors current
-      // FFmpeg spdifenc behaviour: a positive timing delta adds padding, while
-      // a negative result means no padding is inserted for this discontinuity.
+      // existing MAT stream and carry the required padding forward instead of
+      // letting the discontinuity grow into a packer reset/drop.
       m_state.prevFrametimeValid = false;
       spaceSize = frameSamples * (64 >> (m_state.ratebits & 7));
 
@@ -111,29 +109,18 @@ bool CPackerMAT::PackTrueHD(const uint8_t* data, int size)
 
       const int32_t currentFrameOutputOffset =
           static_cast<int32_t>(prevOutput - frameTime);
-      const int32_t bytesPerSample = 64 >> (m_state.ratebits & 7);
 
-      const int64_t previousFramePadding =
-          static_cast<int64_t>(spaceSize) - static_cast<int64_t>(m_state.prevMatFramesize);
-      const int64_t discontinuityPadding =
-          static_cast<int64_t>(m_state.nOutputTimeOffset - currentFrameOutputOffset) *
-          bytesPerSample;
-      const int64_t branchPadding = previousFramePadding + discontinuityPadding;
-
-      if (branchPadding > 0)
-        m_state.padding += static_cast<uint32_t>(branchPadding);
+      if (m_state.nOutputTimeOffset >= currentFrameOutputOffset)
+      {
+        m_state.padding +=
+            (m_state.nOutputTimeOffset - currentFrameOutputOffset) *
+            (64 >> (m_state.ratebits & 7));
+      }
 
       CLog::Log(LOGINFO,
-                "CPackerMAT::PackTrueHD: seamless branch padding {} + correction {} -> {} bytes "
+                "CPackerMAT::PackTrueHD: seamless branch carrying forward {} bytes padding "
                 "(offset {} -> {})",
-                previousFramePadding, discontinuityPadding,
-                branchPadding > 0 ? branchPadding : 0,
-                m_state.nOutputTimeOffset, currentFrameOutputOffset);
-
-      // The branch padding was handled above as one signed calculation.
-      // Prevent the generic padding calculation below from adding the nominal
-      // previous-frame padding a second time.
-      spaceSize = m_state.prevMatFramesize;
+                m_state.padding, m_state.nOutputTimeOffset, currentFrameOutputOffset);
     }
     m_state.outputTiming = info.outputTiming;
     m_state.outputTimingValid = true;
