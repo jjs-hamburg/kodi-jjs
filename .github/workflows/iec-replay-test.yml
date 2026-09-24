@@ -1,0 +1,40 @@
+name: Build JJS IEC Replay
+
+on:
+  push:
+    branches:
+      - iec-replay-test
+    paths:
+      - 'tools/iec-replay-test/**'
+      - '.github/workflows/iec-replay-test.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK
+        run: gradle --no-daemon -p tools/iec-replay-test assembleDebug
+
+      - name: Stage APK
+        run: cp tools/iec-replay-test/app/build/outputs/apk/debug/app-debug.apk JJS-IEC-Replay.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: JJS-IEC-Replay
+          path: JJS-IEC-Replay.apk
