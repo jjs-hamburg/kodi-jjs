@@ -21,9 +21,6 @@
 #include "utils/log.h"
 
 #include <algorithm>
-#include <cstddef>
-#include <cstdint>
-#include <cstdio>
 #include <limits.h>
 #include <set>
 #include <sstream>
@@ -76,35 +73,6 @@ static unsigned int ALSASampleRateList[] =
 
 namespace
 {
-uint64_t JjsIecDiagHash(const uint8_t* data, std::size_t size)
-{
-  uint64_t hash = 1469598103934665603ULL;
-  for (std::size_t i = 0; i < size; ++i)
-  {
-    hash ^= data[i];
-    hash *= 1099511628211ULL;
-  }
-  return hash;
-}
-
-constexpr uint64_t JJS_IEC_DUMP_MAX_BURSTS = 4000;
-FILE* g_jjsIecDump = nullptr;
-uint64_t g_jjsIecDumpBursts = 0;
-bool g_jjsIecDumpFinished = false;
-
-void JjsIecDumpClose()
-{
-  if (g_jjsIecDump)
-  {
-    std::fflush(g_jjsIecDump);
-    std::fclose(g_jjsIecDump);
-    g_jjsIecDump = nullptr;
-    CLog::Log(LOGINFO,
-              "JJS IEC DUMP closed: /storage/jjs-iec.raw, bursts={}, bytes={}",
-              g_jjsIecDumpBursts, g_jjsIecDumpBursts * 61440ULL);
-  }
-}
-
 struct SndConfigDeleter
 {
   void operator()(snd_config_t* p) { snd_config_delete(p); }
@@ -893,12 +861,6 @@ bool CAESinkALSA::InitializeSW(const ALSAConfig &inconfig)
 
 void CAESinkALSA::Deinitialize()
 {
-  if (g_jjsIecDump && g_jjsIecDumpBursts > 0)
-  {
-    JjsIecDumpClose();
-    g_jjsIecDumpFinished = true;
-  }
-
   if (m_pcm)
   {
     Stop();
@@ -950,68 +912,6 @@ unsigned int CAESinkALSA::AddPackets(uint8_t **data, unsigned int frames, unsign
   unsigned int amount = 0;
   int64_t data_left = (int64_t) frames;
   int frames_written = 0;
-
-  const bool jjsIecDiag =
-      m_passthrough && m_format.m_sampleRate == 192000 &&
-      m_format.m_channelLayout.Count() == 8 && m_format.m_frameSize == 16;
-  uint64_t jjsIecDiagSeq = 0;
-  uint64_t jjsIecDiagHash = 0;
-  if (jjsIecDiag && frames > 0)
-  {
-    static uint64_t nextJjsIecDiagSeq = 0;
-    jjsIecDiagSeq = ++nextJjsIecDiagSeq;
-    jjsIecDiagHash = JjsIecDiagHash(
-        static_cast<const uint8_t*>(buffer),
-        static_cast<std::size_t>(frames) * m_format.m_frameSize);
-
-    if (!g_jjsIecDumpFinished)
-    {
-      if (!g_jjsIecDump)
-      {
-        g_jjsIecDump = std::fopen("/storage/jjs-iec.raw", "wb");
-        if (g_jjsIecDump)
-        {
-          g_jjsIecDumpBursts = 0;
-          CLog::Log(LOGINFO,
-                    "JJS IEC DUMP started: /storage/jjs-iec.raw (max {} bursts)",
-                    JJS_IEC_DUMP_MAX_BURSTS);
-        }
-        else
-        {
-          CLog::Log(LOGERROR, "JJS IEC DUMP failed to open /storage/jjs-iec.raw");
-          g_jjsIecDumpFinished = true;
-        }
-      }
-
-      if (g_jjsIecDump)
-      {
-        const std::size_t dumpBytes =
-            static_cast<std::size_t>(frames) * m_format.m_frameSize;
-        const std::size_t dumpWritten =
-            std::fwrite(buffer, 1, dumpBytes, g_jjsIecDump);
-        if (dumpWritten != dumpBytes)
-        {
-          CLog::Log(LOGERROR,
-                    "JJS IEC DUMP short write: requested={}, written={}",
-                    dumpBytes, dumpWritten);
-          JjsIecDumpClose();
-          g_jjsIecDumpFinished = true;
-        }
-        else
-        {
-          ++g_jjsIecDumpBursts;
-          if ((g_jjsIecDumpBursts % 500) == 0)
-            std::fflush(g_jjsIecDump);
-
-          if (g_jjsIecDumpBursts >= JJS_IEC_DUMP_MAX_BURSTS)
-          {
-            JjsIecDumpClose();
-            g_jjsIecDumpFinished = true;
-          }
-        }
-      }
-    }
-  }
 
   while (data_left > 0)
   {
@@ -1087,17 +987,6 @@ unsigned int CAESinkALSA::AddPackets(uint8_t **data, unsigned int frames, unsign
     data_left -= ret;
     buffer = data[0]+offset*m_format.m_frameSize + frames_written*m_format.m_frameSize;
   }
-
-  if (jjsIecDiag)
-  {
-    CLog::Log(LOGINFO,
-              "JJS IEC DIAG ALSA wrote: seq={}, offset={}, requested={}, written={}, "
-              "bytes={}, hash={:016x}, fragmented={}",
-              jjsIecDiagSeq, offset, frames, frames_written,
-              static_cast<std::size_t>(frames) * m_format.m_frameSize,
-              jjsIecDiagHash, m_fragmented);
-  }
-
   return frames_written;
 }
 
