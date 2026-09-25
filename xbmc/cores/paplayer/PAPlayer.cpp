@@ -275,8 +275,21 @@ bool PAPlayer::OpenFile(const CFileItem& file, const CPlayerOptions &options)
 
   if (closeBeforeOpen)
   {
-    CloseAllStreams(!m_isPaused);
-    StopThread();
+    if (rawFormatChange)
+    {
+      // ActiveAE allows only one non-drained RAW stream and rejects a new PCM
+      // stream while that RAW stream still exists. A soft stop leaves the RAW
+      // stream alive long enough for QueueNextFileEx() to race MakeStream()
+      // and advance the playlist on the temporary failure. On a genuine
+      // RAW/PCM format change, release the old stream synchronously first.
+      CloseAllStreams(false);
+      StopThread(true);
+    }
+    else
+    {
+      CloseAllStreams(!m_isPaused);
+      StopThread();
+    }
     m_isPaused = false; // Make sure to reset the pause state
   }
 
