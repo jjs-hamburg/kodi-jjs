@@ -277,13 +277,21 @@ bool PAPlayer::OpenFile(const CFileItem& file, const CPlayerOptions &options)
   {
     if (rawFormatChange)
     {
-      // ActiveAE rejects a new PCM stream while an old RAW stream is still
-      // present and not drained. A soft stop can leave that RAW stream alive
-      // long enough for QueueNextFileEx() to advance through several tracks.
-      // On a genuine RAW/PCM format change, release the old RAW stream
-      // synchronously before preparing the new stream.
-      CloseAllStreams(false);
+      // A manual next/previous across an incompatible audio format must leave
+      // no old or asynchronously prepared stream behind. Stop PAPlayer first,
+      // wait for all outstanding QueueNextFile jobs, then release every stream
+      // before preparing the selected item.
       StopThread(true);
+      {
+        std::unique_lock<CCriticalSection> lock(m_streamsLock);
+        while (m_jobCounter > 0)
+        {
+          lock.unlock();
+          m_jobEvent.Wait(100ms);
+          lock.lock();
+        }
+      }
+      CloseAllStreams(false);
     }
     else
     {
@@ -704,12 +712,13 @@ bool PAPlayer::CloseFile(bool reopen)
 
   if (!m_isPaused)
     SoftStop(true, true);
-  CloseAllStreams(false);
 
-  /* wait for the thread to terminate */
+  /* stop PAPlayer before final stream cleanup */
   StopThread(true);//true - wait for end of thread
 
-  // wait for any pending jobs to complete
+  // A queued preparation job may still create an AE stream after Stop was
+  // requested. Wait for all such jobs first, then remove every stream so a
+  // stopped player cannot leave an orphan RAW stream in ActiveAE.
   {
     std::unique_lock<CCriticalSection> lock(m_streamsLock);
     while (m_jobCounter > 0)
@@ -719,6 +728,8 @@ bool PAPlayer::CloseFile(bool reopen)
       lock.lock();
     }
   }
+
+  CloseAllStreams(false);
   CServiceBroker::GetDataCacheCore().Reset();
   return true;
 }
