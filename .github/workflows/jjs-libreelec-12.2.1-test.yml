@@ -111,6 +111,14 @@ jobs:
             's#https://code.videolan.org/videolan/${PKG_NAME}/-/archive/${PKG_VERSION}/${PKG_NAME}-${PKG_VERSION}.tar.gz#https://mirrors.kodi.tv/build-deps/sources/${PKG_NAME}-${PKG_VERSION}.tar.gz#' \
             LibreELEC.tv/packages/multimedia/libudfread/package.mk
 
+          # freedesktop.org currently returns HTTP 418 to GitHub Actions for
+          # fontconfig 2.15.0, and LibreELEC's mirror does not carry the archive.
+          # AMD mirrors the same release tarball. Keep LibreELEC's pinned SHA256.
+          sed -i \
+            's#https://www.freedesktop.org/software/fontconfig/release/${PKG_NAME}-${PKG_VERSION}.tar.gz#https://edf.amd.com/sswreleases/amd-edf/25.05/downloads/${PKG_NAME}-${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/x11/other/fontconfig/package.mk
+          grep '^PKG_URL=' LibreELEC.tv/packages/x11/other/fontconfig/package.mk
+
           sed -i \
             's#http://www.freedesktop.org/software/pulseaudio/releases/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://na.edge.kernel.org/gentoo/distfiles/62/${PKG_NAME}-${PKG_VERSION}.tar.xz#' \
             LibreELEC.tv/packages/audio/pulseaudio/package.mk
@@ -374,6 +382,14 @@ jobs:
           # freedesktop.org returns HTTP 418 to GitHub Actions for these two
           # pinned release archives. Gentoo mirrors carry the same files; the
           # LibreELEC SHA256 values remain unchanged and are verified by preflight.
+          # freedesktop.org currently returns HTTP 418 to GitHub Actions for
+          # fontconfig 2.15.0, and LibreELEC's mirror does not carry the archive.
+          # AMD mirrors the same release tarball. Keep LibreELEC's pinned SHA256.
+          sed -i \
+            's#https://www.freedesktop.org/software/fontconfig/release/${PKG_NAME}-${PKG_VERSION}.tar.gz#https://edf.amd.com/sswreleases/amd-edf/25.05/downloads/${PKG_NAME}-${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/x11/other/fontconfig/package.mk
+          grep '^PKG_URL=' LibreELEC.tv/packages/x11/other/fontconfig/package.mk
+
           sed -i \
             's#http://www.freedesktop.org/software/pulseaudio/releases/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://na.edge.kernel.org/gentoo/distfiles/62/${PKG_NAME}-${PKG_VERSION}.tar.xz#' \
             LibreELEC.tv/packages/audio/pulseaudio/package.mk
