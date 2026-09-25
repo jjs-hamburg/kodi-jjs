@@ -1472,7 +1472,7 @@ CActiveAEStream* CActiveAE::CreateStream(MsgStreamNew *streamMsg)
               "JJS AE DIAG: rejecting new stream format={} raw={} because existing active stream(s) block it",
               static_cast<int>(streamMsg->format.m_dataFormat),
               streamMsg->format.m_dataFormat == AE_FMT_RAW);
-    for (const auto* existing : m_streams)
+    for (auto* existing : m_streams)
     {
       CLog::Log(LOGWARNING,
                 "JJS AE DIAG: existing stream id={} format={} raw={} drained={}",
