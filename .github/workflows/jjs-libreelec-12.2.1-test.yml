@@ -75,9 +75,8 @@ jobs:
 
           # wireguard-tools v1.0.20250521 is still the same tagged upstream source,
           # but git.zx2c4.com currently generates different snapshot archive bytes
-          # than the checksum pinned by LibreELEC 12.2.1. The LibreELEC mirror
-          # does not contain the old archive. Keep version and official source URL
-          # unchanged and accept the currently reproducible upstream archive hash.
+          # than the checksum pinned by LibreELEC 12.2.1. Keep version and source
+          # URL unchanged; accept the currently reproducible upstream archive hash.
           WG_PKG="LibreELEC.tv/packages/network/wireguard-tools/package.mk"
           grep -q '^PKG_SHA256="6afe492647c3b0b2f68ab6df524e9e4290d03c34c3027e069e5bbc486949960e"
           while IFS= read -r -d '' f; do
@@ -849,9 +848,8 @@ jobs:
 
           # wireguard-tools v1.0.20250521 is still the same tagged upstream source,
           # but git.zx2c4.com currently generates different snapshot archive bytes
-          # than the checksum pinned by LibreELEC 12.2.1. The LibreELEC mirror
-          # does not contain the old archive. Keep version and official source URL
-          # unchanged and accept the currently reproducible upstream archive hash.
+          # than the checksum pinned by LibreELEC 12.2.1. Keep version and source
+          # URL unchanged; accept the currently reproducible upstream archive hash.
           WG_PKG="LibreELEC.tv/packages/network/wireguard-tools/package.mk"
           grep -q '^PKG_SHA256="6afe492647c3b0b2f68ab6df524e9e4290d03c34c3027e069e5bbc486949960e"
           # LibreELEC 12.2.1 contains a number of GNU package URLs via
