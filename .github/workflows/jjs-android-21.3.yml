@@ -1,0 +1,257 @@
+name: Build Kodi JJS 21.3 ARM64 APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+
+    env:
+      KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
+      KODI_REF: 21.3-Omega-jjs
+      EXPECTED_KODI_COMMIT: 5cba00675177235e4403428972a0a929b784be9e
+      EXPECTED_INTERNAL_APP_NAME: Kodi
+      SOURCE_DISPLAY_NAME: Kodi JJS
+      SOURCE_PACKAGE: org.jjs.kodi
+      EXPECTED_DISPLAY_NAME: Kodi JJS
+      EXPECTED_PACKAGE: org.jjs.kodi
+      EXPECTED_VERSION_CODE: "2103000"
+      EXPECTED_VERSION_NAME: "21.3-JJS.003"
+      JJS_BUILD: "003"
+      JJS_VERSION_TAG: "JJS.003"
+      JJS_ARTIFACT_NAME: Kodi-JJS-21.3-JJS.003-arm64
+      EXPECTED_SIGNING_CERT_SHA256: caddfcba2d9ad9b880d410a048dd19c5212e2994669f226724250439a20840c6
+      ANDROID_NDK_VERSION: 21.4.7075529
+      ANDROID_BUILD_TOOLS_VERSION: 33.0.1
+      KODI_DEPENDS: ${{ github.workspace }}/android-tools/xbmc-depends
+      KODI_TARBALLS: ${{ github.workspace }}/android-tools/xbmc-tarballs
+      KODI_BUILD: ${{ github.workspace }}/kodi-build
+
+    steps:
+      - name: Checkout build wrapper
+        uses: actions/checkout@v5
+
+      - name: Check JJS signing secrets
+        shell: bash
+        env:
+          JJS_KEYSTORE_B64: ${{ secrets.JJS_ANDROID_KEYSTORE_B64 }}
+          JJS_STORE_PASS: ${{ secrets.JJS_ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "${JJS_KEYSTORE_B64}"
+          test -n "${JJS_STORE_PASS}"
+
+      - name: Free runner disk space
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/powershell /usr/local/share/boost || true
+          sudo rm -rf "${ANDROID_SDK_ROOT}/ndk"/* || true
+          sudo rm -rf "${ANDROID_SDK_ROOT}/build-tools"/* || true
+          sudo rm -rf "${ANDROID_SDK_ROOT}/platforms"/* || true
+          sudo apt-get clean
+          df -h /
+
+      - name: Install host build packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf bison build-essential curl flex gawk git gperf \
+            lib32stdc++6 lib32z1 lib32z1-dev libcurl4-openssl-dev unzip zip zlib1g-dev \
+            ccache openjdk-17-jdk-headless
+
+      - name: Use Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Android SDK and NDK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SDKMANAGER="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;${ANDROID_BUILD_TOOLS_VERSION}" \
+            "ndk;${ANDROID_NDK_VERSION}"
+
+      - name: Cache Kodi dependency downloads and compiled depends
+        uses: actions/cache@v5
+        with:
+          path: |
+            android-tools/xbmc-tarballs
+            android-tools/xbmc-depends
+          key: kodi-21.3-arm64-depends-r21e-v1
+
+      - name: Fetch pinned Kodi JJS source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --branch "${KODI_REF}" --depth 1 "${KODI_REPO}" kodi
+          ACTUAL_COMMIT="$(git -C kodi rev-parse HEAD)"
+          echo "Kodi JJS source: ${ACTUAL_COMMIT}"
+          test "${ACTUAL_COMMIT}" = "${EXPECTED_KODI_COMMIT}"
+          grep -qx "APP_NAME ${EXPECTED_INTERNAL_APP_NAME}" kodi/version.txt
+          grep -qx "VERSION_TAG ${JJS_VERSION_TAG}" kodi/version.txt
+          grep -qx "APP_PACKAGE ${SOURCE_PACKAGE}" kodi/version.txt
+          grep -Fq "<string name=\"app_name\">${SOURCE_DISPLAY_NAME}</string>" \
+            kodi/tools/android/packaging/xbmc/strings.xml.in
+          git -C kodi diff --check
+          test -z "$(git -C kodi status --porcelain)"
+
+      - name: Verify final source tree is clean
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git -C kodi diff --check
+          test -z "$(git -C kodi status --porcelain)"
+          grep -qx "APP_PACKAGE ${EXPECTED_PACKAGE}" kodi/version.txt
+          grep -Fq "<string name=\"app_name\">${EXPECTED_DISPLAY_NAME}</string>" \
+            kodi/tools/android/packaging/xbmc/strings.xml.in
+
+      - name: Configure Kodi Android ARM64 depends
+        working-directory: kodi/tools/depends
+        run: |
+          set -euxo pipefail
+          mkdir -p "${KODI_TARBALLS}" "${KODI_DEPENDS}"
+          ./bootstrap
+          ./configure \
+            --with-tarballs="${KODI_TARBALLS}" \
+            --host=aarch64-linux-android \
+            --with-sdk-path="${ANDROID_SDK_ROOT}" \
+            --with-ndk-path="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}" \
+            --prefix="${KODI_DEPENDS}" \
+            --disable-debug
+
+      - name: Build Kodi depends
+        working-directory: kodi/tools/depends
+        run: |
+          set -euxo pipefail
+          make -j"$(nproc)"
+
+      - name: Generate Kodi build tree
+        working-directory: kodi
+        run: |
+          set -euxo pipefail
+          mkdir -p "${KODI_BUILD}"
+          make -C tools/depends/target/cmakebuildsys BUILD_DIR="${KODI_BUILD}"
+
+      - name: Build Kodi JJS
+        working-directory: kodi-build
+        run: |
+          set -euxo pipefail
+          make -j"$(nproc)"
+
+      - name: Free packaging headroom
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf "${KODI_TARBALLS}"
+          rm -rf "${HOME}/.ccache" "${HOME}/.cache/pip" || true
+          sudo apt-get clean
+          df -h /
+
+      - name: Build signed Kodi JJS APK
+        working-directory: kodi-build
+        shell: bash
+        env:
+          JJS_KEYSTORE_B64: ${{ secrets.JJS_ANDROID_KEYSTORE_B64 }}
+          JJS_STORE_PASS: ${{ secrets.JJS_ANDROID_KEYSTORE_PASSWORD }}
+          JJS_KEY_PASS_SECRET: ${{ secrets.JJS_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p "${GITHUB_WORKSPACE}/signing"
+          KEYSTORE="${GITHUB_WORKSPACE}/signing/jjs-kodi.keystore"
+          printf '%s' "${JJS_KEYSTORE_B64}" | base64 --decode > "${KEYSTORE}"
+          chmod 600 "${KEYSTORE}"
+
+          export LANG=C
+          KEY_ALIAS="$(keytool -list \
+            -keystore "${KEYSTORE}" \
+            -storepass "${JJS_STORE_PASS}" 2>/dev/null \
+            | awk -F, '/PrivateKeyEntry/{gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1); print $1; exit}')"
+          test -n "${KEY_ALIAS}"
+
+          JJS_KEY_PASS="${JJS_KEY_PASS_SECRET:-${JJS_STORE_PASS}}"
+          export KODI_ANDROID_STORE_FILE="${KEYSTORE}"
+          export KODI_ANDROID_STORE_PASSWORD="${JJS_STORE_PASS}"
+          export KODI_ANDROID_KEY_ALIAS="${KEY_ALIAS}"
+          export KODI_ANDROID_KEY_PASSWORD="${JJS_KEY_PASS}"
+
+          make apk
+          df -h /
+
+      - name: Verify and collect installable APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BUILD_TOOLS="${ANDROID_SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS_VERSION}"
+          AAPT="${BUILD_TOOLS}/aapt"
+          APKSIGNER="${BUILD_TOOLS}/apksigner"
+
+          mkdir -p artifact
+          APK="$(find "${GITHUB_WORKSPACE}/kodi" "${KODI_BUILD}" -type f -name '*.apk' -printf '%T@ %p\n' \
+            | sort -nr | head -1 | cut -d' ' -f2-)"
+          test -n "${APK}"
+
+          "${AAPT}" dump badging "${APK}" | tee artifact/AAPT-BADGING.txt
+          grep -q "package: name='${EXPECTED_PACKAGE}'" artifact/AAPT-BADGING.txt
+          grep -q "versionCode='${EXPECTED_VERSION_CODE}'" artifact/AAPT-BADGING.txt
+          grep -q "versionName='${EXPECTED_VERSION_NAME}'" artifact/AAPT-BADGING.txt
+          grep -q "application-label:'${EXPECTED_DISPLAY_NAME}'" artifact/AAPT-BADGING.txt
+
+          "${APKSIGNER}" verify --verbose --print-certs "${APK}" \
+            | tee artifact/APKSIGNER-VERIFY.txt
+          CERT_SHA256="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' artifact/APKSIGNER-VERIFY.txt \
+            | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          test "${CERT_SHA256}" = "${EXPECTED_SIGNING_CERT_SHA256}"
+
+          unzip -Z1 "${APK}" | grep -q '^lib/arm64-v8a/libkodi.so$'
+          if unzip -Z1 "${APK}" | grep '^lib/' | grep -Ev '^lib/arm64-v8a/' >/dev/null; then
+            echo "::error::Unexpected non-arm64 native libraries in APK"
+            exit 1
+          fi
+
+          SHORT_COMMIT="${EXPECTED_KODI_COMMIT:0:7}"
+          APK_BASENAME="Kodi-JJS-${EXPECTED_VERSION_NAME}-${SHORT_COMMIT}-arm64.apk"
+          cp "${APK}" "artifact/${APK_BASENAME}"
+          APK_SHA256="$(sha256sum "artifact/${APK_BASENAME}" | awk '{print $1}')"
+          LIB_SHA256="$(unzip -p "artifact/${APK_BASENAME}" lib/arm64-v8a/libkodi.so | sha256sum | awk '{print $1}')"
+
+          cat > artifact/BUILD-INFO.txt <<EOF
+          Kodi repository: ${KODI_REPO}
+          Kodi source ref: ${KODI_REF}
+          Kodi source commit: ${EXPECTED_KODI_COMMIT}
+          Kodi JJS build: ${JJS_BUILD}
+          Kodi JJS version tag: ${JJS_VERSION_TAG}
+          Android display name: ${EXPECTED_DISPLAY_NAME}
+          Android package: ${EXPECTED_PACKAGE}
+          Version: ${EXPECTED_VERSION_NAME} (${EXPECTED_VERSION_CODE})
+          APK filename: ${APK_BASENAME}
+          Target: Android arm64-v8a
+          NDK: ${ANDROID_NDK_VERSION}
+          Signing certificate SHA256: ${CERT_SHA256}
+          APK SHA256: ${APK_SHA256}
+          libkodi.so SHA256: ${LIB_SHA256}
+          Wrapper commit: ${GITHUB_SHA}
+          EOF
+
+          sha256sum "artifact/${APK_BASENAME}" > artifact/SHA256SUMS.txt
+
+      - name: Upload ready-to-install Kodi JJS APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.JJS_ARTIFACT_NAME }}
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 90
