@@ -156,7 +156,7 @@ jobs:
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
 
-          sed -i 's/LIBREELEC_VERSION="devel"/LIBREELEC_VERSION="12.2.1-JJS.003-Test"/' \
+          sed -i 's/LIBREELEC_VERSION="devel"/LIBREELEC_VERSION="12.2.1-JJS.004-Test"/' \
             LibreELEC.tv/distributions/LibreELEC/version
 
       - name: Cache LibreELEC source archives
@@ -259,7 +259,7 @@ jobs:
           key: libreelec-12.2.1-generic-x86_64-ccache-ready-v1
 
   build:
-    name: Build LibreELEC JJS.003
+    name: Build LibreELEC JJS.004
     needs: prime_ccache
     runs-on: ubuntu-22.04
     timeout-minutes: 355
@@ -270,7 +270,7 @@ jobs:
       LE_COMMIT: 6209f5a3b067c45fbf527286dd84ee483294b46a
       KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
       KODI_BASE: a3a448d26b8d560a65655dab2cd122994dc4e146
-      KODI_JJS: 5cba00675177235e4403428972a0a929b784be9e
+      KODI_JJS: 0ee878276c2b05524ee962b9b4047e0ed52a96e4
       PROJECT: Generic
       DEVICE: Generic
       ARCH: x86_64
@@ -537,7 +537,7 @@ jobs:
           ID_PATCH="$GITHUB_WORKSPACE/kodi-jjs-identity-libreelec.patch"
           git -C kodi-jjs show "${KODI_BASE}:version.txt" > "$ID_BASE"
           cp "$ID_BASE" "$ID_JJS"
-          sed -i -e 's/^VERSION_TAG.*/VERSION_TAG JJS.003/' "$ID_JJS"
+          sed -i -e 's/^VERSION_TAG.*/VERSION_TAG JJS.004/' "$ID_JJS"
           diff -u --label a/version.txt --label b/version.txt "$ID_BASE" "$ID_JJS" > "$ID_PATCH" || test $? -eq 1
           git -C kodi-jjs diff --binary --no-ext-diff "${KODI_BASE}" "${KODI_JJS}" -- \
             xbmc/windows/GUIWindowSystemInfo.cpp >> "$ID_PATCH"
@@ -563,7 +563,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          sed -i 's/LIBREELEC_VERSION="devel"/LIBREELEC_VERSION="12.2.1-JJS.003-Test"/' \
+          sed -i 's/LIBREELEC_VERSION="devel"/LIBREELEC_VERSION="12.2.1-JJS.004-Test"/' \
             LibreELEC.tv/distributions/LibreELEC/version
           grep LIBREELEC_VERSION LibreELEC.tv/distributions/LibreELEC/version
 
@@ -621,7 +621,7 @@ jobs:
         if: steps.build_image.outputs.complete != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: LibreELEC-JJS.003-build-diagnostics
+          name: LibreELEC-JJS.004-build-diagnostics
           path: libreelec-build-tail.log
           if-no-files-found: error
           retention-days: 14
@@ -630,7 +630,7 @@ jobs:
         if: steps.build_image.outputs.complete == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: LibreELEC-Generic-x86_64-12.2.1-JJS.003-Test
+          name: LibreELEC-Generic-x86_64-12.2.1-JJS.004-Test
           if-no-files-found: error
           retention-days: 14
           path: |
