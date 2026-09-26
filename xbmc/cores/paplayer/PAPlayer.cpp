@@ -326,12 +326,6 @@ bool PAPlayer::OpenFile(const CFileItem& file, const CPlayerOptions &options)
     m_isPaused = false; // Make sure to reset the pause state
   }
 
-  // OpenFile() starts an explicitly selected item. Clear the end-of-playlist
-  // state before the asynchronous prepare job and player thread are started;
-  // otherwise the freshly restarted PAPlayer thread can see an empty stream
-  // list plus m_isFinished=true and exit before QueueNextFileEx() adds the new stream.
-  m_isFinished = false;
-
   {
     std::unique_lock<CCriticalSection> lock(m_streamsLock);
     m_jobCounter++;
@@ -814,7 +808,7 @@ void PAPlayer::Process()
 inline void PAPlayer::ProcessStreams(double &freeBufferTime)
 {
   std::unique_lock<CCriticalSection> sharedLock(m_streamsLock);
-  if (m_isFinished && m_streams.empty() && m_finishing.empty())
+  if (m_isFinished && m_streams.empty() && m_finishing.empty() && m_jobCounter == 0)
   {
     m_isPlaying = false;
     freeBufferTime = 1.0;
