@@ -347,12 +347,29 @@ bool PAPlayer::OpenFile(const CFileItem& file, const CPlayerOptions &options)
   }
   lock.unlock();
 
+  CLog::Log(LOGWARNING,
+            "JJS PA THREAD DIAG before Create: running={} isPlaying={} isFinished={} "
+            "bStop={} jobs={}",
+            IsRunning() ? 1 : 0, m_isPlaying ? 1 : 0, m_isFinished ? 1 : 0,
+            m_bStop ? 1 : 0, m_jobCounter);
   if (!IsRunning())
+  {
     Create();
+    CLog::Log(LOGWARNING,
+              "JJS PA THREAD DIAG after Create: running={} isPlaying={} isFinished={} "
+              "bStop={} jobs={}",
+              IsRunning() ? 1 : 0, m_isPlaying ? 1 : 0, m_isFinished ? 1 : 0,
+              m_bStop ? 1 : 0, m_jobCounter);
+  }
 
   /* trigger playback start */
   m_isPlaying = true;
   m_startEvent.Set();
+  CLog::Log(LOGWARNING,
+            "JJS PA THREAD DIAG start signaled: running={} isPlaying={} isFinished={} "
+            "bStop={} jobs={}",
+            IsRunning() ? 1 : 0, m_isPlaying ? 1 : 0, m_isFinished ? 1 : 0,
+            m_bStop ? 1 : 0, m_jobCounter);
 
   // OnPlayBackStarted to be made only once. Callback processing may be slower than player process
   // so clear signal flag first otherwise async stream processing could also make callback
@@ -759,7 +776,16 @@ bool PAPlayer::CloseFile(bool reopen)
 
 void PAPlayer::Process()
 {
-  if (!m_startEvent.Wait(100ms))
+  CLog::Log(LOGWARNING,
+            "JJS PA THREAD DIAG Process enter: isPlaying={} isFinished={} bStop={} jobs={}",
+            m_isPlaying ? 1 : 0, m_isFinished ? 1 : 0, m_bStop ? 1 : 0, m_jobCounter);
+  const bool gotStartEvent = m_startEvent.Wait(100ms);
+  CLog::Log(LOGWARNING,
+            "JJS PA THREAD DIAG Process wait done: gotStart={} isPlaying={} isFinished={} "
+            "bStop={} jobs={}",
+            gotStartEvent ? 1 : 0, m_isPlaying ? 1 : 0, m_isFinished ? 1 : 0,
+            m_bStop ? 1 : 0, m_jobCounter);
+  if (!gotStartEvent)
   {
     CLog::Log(LOGDEBUG, "PAPlayer::Process - Failed to receive start event");
     return;
@@ -802,14 +828,22 @@ void PAPlayer::Process()
 
     GetTimeInternal(); //update for GUI
   }
+  CLog::Log(LOGWARNING,
+            "JJS PA THREAD DIAG Process exit: isPlaying={} isFinished={} bStop={} jobs={} "
+            "streams={} finishing={}",
+            m_isPlaying ? 1 : 0, m_isFinished ? 1 : 0, m_bStop ? 1 : 0, m_jobCounter,
+            m_streams.size(), m_finishing.size());
   m_isPlaying = false;
 }
 
 inline void PAPlayer::ProcessStreams(double &freeBufferTime)
 {
   std::unique_lock<CCriticalSection> sharedLock(m_streamsLock);
-  if (m_isFinished && m_streams.empty() && m_finishing.empty() && m_jobCounter == 0)
+  if (m_isFinished && m_streams.empty() && m_finishing.empty())
   {
+    CLog::Log(LOGWARNING,
+              "JJS PA THREAD DIAG ProcessStreams finish exit: jobs={} isPlaying={} bStop={}",
+              m_jobCounter, m_isPlaying ? 1 : 0, m_bStop ? 1 : 0);
     m_isPlaying = false;
     freeBufferTime = 1.0;
     return;
@@ -1555,6 +1589,11 @@ void PAPlayer::OnJobComplete(unsigned int jobID, bool success, CJob *job)
 {
   std::unique_lock<CCriticalSection> lock(m_streamsLock);
   m_jobCounter--;
+  CLog::Log(LOGWARNING,
+            "JJS PA THREAD DIAG job complete: success={} jobs={} streams={} finishing={} "
+            "current={} isPlaying={} isFinished={}",
+            success ? 1 : 0, m_jobCounter, m_streams.size(), m_finishing.size(),
+            m_currentStream ? 1 : 0, m_isPlaying ? 1 : 0, m_isFinished ? 1 : 0);
   m_jobEvent.Set();
 }
 
