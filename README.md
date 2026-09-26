@@ -1,100 +1,132 @@
 ![Kodi Logo](docs/resources/banner.png)
 
-## About Kodi JJS
+# Kodi JJS
 
-Kodi JJS is a personal fork of Kodi 21.3 Omega created to improve gapless playback of Dolby TrueHD / Atmos material when using RAW passthrough.
+## 1. What is Kodi JJS?
 
-In standard Kodi, playback of consecutive TrueHD / Atmos tracks may tear down and recreate the RAW AudioEngine stream at a track boundary. Even when the following track uses the same compatible output format, this can force the HDMI receiver to resynchronize and produce an audible gap.
+**Kodi JJS** is an unofficial fork of **Kodi 21.3 Omega** focused on one thing:
+**seamless playback of consecutive Dolby TrueHD / Dolby Atmos tracks when using RAW passthrough.**
 
-Kodi JJS changes this behaviour for compatible consecutive RAW streams. Instead of closing and reopening the audio path, the existing AudioEngine / RAW stream is kept alive and handed over to the next track. TrueHD MAT state is preserved across the transition as well. If the actual RAW output format changes, Kodi's normal drain and reopen behaviour is still used.
+With standard Kodi, a track boundary can close and reopen the RAW AudioEngine stream even when the next track uses the same compatible audio format. The HDMI receiver then has to resynchronize, which can produce an audible gap.
 
-The intention is simple: a track change should not interrupt the HDMI audio stream when there is no technical reason to recreate it.
+Kodi JJS keeps the compatible audio path alive across the track change instead.
 
-This fork was originally created for my own personal use. I am making the source code and builds available for anyone who may find them useful, but this is not an official Kodi project and comes without any warranty, support commitment, or obligation to provide future updates or maintenance.
+The result is simple:
 
-Kodi itself is developed by Team Kodi and remains licensed under the GNU GPL.
+> **No unnecessary HDMI / AVR resynchronization between compatible TrueHD / Atmos tracks.**
 
-For technical details about the JJS changes, see [README.JJS.md](README.JJS.md).
+Kodi JJS otherwise stays as close as possible to standard Kodi. The project does not try to redesign Kodi or replace working upstream behaviour.
 
+### Current Android release
 
-<p align="center">
-  <strong>
-    <a href="https://kodi.tv/">website</a>
-    •
-    <a href="https://kodi.wiki/view/Main_Page">docs</a>
-    •
-    <a href="https://forum.kodi.tv/">community</a>
-    •
-    <a href="https://kodi.tv/addons">add-ons</a>
-  </strong>
-</p>
+**Kodi JJS 21.3-JJS.004 – Android ARM64**
 
-<p align="center">
-  <a href="LICENSE.md"><img alt="License" src="https://img.shields.io/badge/license-GPLv2-blue.svg?style=flat-square"></a>
-  <a href="https://docs.kodi.tv/"><img alt="Documentation" src="https://img.shields.io/badge/code-documented-brightgreen.svg?style=flat-square"></a>
-  <a href="https://github.com/xbmc/xbmc/pulls"><img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square"></a>
-  <a href="#how-to-contribute"><img alt="Contributions Welcome" src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat-square"></a>
-  <a href="http://jenkins.kodi.tv/"><img alt="Build" src="https://img.shields.io/badge/CI-jenkins-brightgreen.svg?style=flat-square"></a>
-  <a href="https://github.com/xbmc/xbmc/commits/master"><img alt="Commits" src="https://img.shields.io/github/commits-since/xbmc/xbmc/latest.svg?style=flat-square"></a>
-</p>
+[Download the current release](https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.004)
 
-<a href="https://play.google.com/store/apps/details?id=org.xbmc.kodi" target="_blank">
-  <img src="https://play.google.com/intl/en_us/badges/images/generic/en-play-badge.png" height="80"/>
-</a>
+The Android build uses its own package name, **`org.jjs.kodi`**, so it can be installed **in parallel with standard Kodi**.
 
-<h1 align="center">
-  Welcome to Kodi Home Theater Software!
-</h1>
+---
 
-Kodi is an award-winning **free and open source** software media player and entertainment hub for digital media. Available as a native application for **Android, Linux, BSD, macOS, iOS, tvOS and Windows operating systems**, Kodi runs on most common processor architectures.
+## 2. How to test
 
-Created in 2003 by a group of like minded programmers, Kodi is a non-profit project run by the XBMC Foundation and developed by volunteers located around the world. More than 500 software developers have contributed to Kodi to date, and 100-plus translators have worked to expand its reach, making it available in more than 70 languages.
+The fastest way to try Kodi JJS is with the
+**[JJS KODI Toolbox](https://github.com/jjs-hamburg/jjs-kodi-toolbox)**.
 
-While Kodi functions very well as a standard media player application for your computer, it has been designed to be the perfect companion for your HTPC. With its **beautiful interface and powerful skinning engine**, Kodi feels very natural to use from the couch with a remote control and is the ideal solution for your home theater.
+You can move an existing Kodi installation to Kodi JJS in roughly **10 minutes**, including add-ons, databases, settings, skins and the rest of the Kodi profile.
 
-## Give your media the love it deserves
-Kodi can be used to play almost all popular audio and video formats around. It was designed for network playback, so you can stream your multimedia from anywhere in the house or directly from the internet using practically any protocol available.
+### Android / NVIDIA Shield
 
-Point Kodi to your media and watch it **scan and automagically create a personalized library** complete with box covers, descriptions, and fanart. There are playlist and slideshow functions, a weather forecast feature and many audio visualizations. Once installed, your computer or HTPC will become a fully functional multimedia jukebox.
+1. Install **Kodi JJS** alongside your existing Kodi.
+2. Start **JJS KODI Toolbox** on Windows.
+3. Select your existing Kodi installation as **Source A** and Kodi JJS as **Target B**.
+4. Transfer the complete Kodi profile.
+5. Start Kodi JJS and test.
 
-<p align="center">
-  <img src="docs/resources/kodi.gif" alt="Kodi">
-</p>
+Because Kodi JJS uses a separate Android package, the existing Kodi installation remains untouched.
 
-## Getting Started
-Kodi's developers work hard to make it support a large range of devices and operating systems. We provide final as well as development builds. To get started, head over to the **[downloads section](https://kodi.tv/download)** and simply select the platform that you want to install it on. A **[quick start guide](https://kodi.wiki/view/quick_start_guide)** to help you get acquainted with Kodi is available in our wiki.
+**Rollback:** simply start the original Kodi again. If you no longer want Kodi JJS, uninstall it.
 
-## How to Contribute
-Kodi is created by users for users and **we welcome every contribution**. There are no highly paid developers or poorly paid support personnel on the phones ready to take your call. There are only users who have seen a problem and done their best to fix it. This means Kodi will always need the contributions of users like you. How can you get involved?
+### LibreELEC
 
-* **Coding:** Developers can help Kodi by **[fixing a bug](https://github.com/xbmc/xbmc/issues)**, adding new features, making our technology smaller and faster and making development easier for others. Kodi's codebase consists mainly of C++ with small parts written in a variety of coding languages. Our add-ons mainly consist of python and XML. For more information, please have a look at our **[contributing guide](docs/CONTRIBUTING.md)**.
-* **Helping users:** Our support process relies on enthusiastic contributors like you to help others get the most out of Kodi. The #1 priority is always answering questions in our **[support forums](https://forum.kodi.tv/)**. Everyday new people discover Kodi, and everyday they are virtually guaranteed to have questions.
-* **Localization:** Translate **[Kodi](https://kodi.weblate.cloud/projects/kodi-core/kodi-main/)**, **[add-ons, skins etc.](https://kodi.weblate.cloud/)** into your native language.
-* **Add-ons:** **[Add-ons](https://kodi.tv/addons)** are what make Kodi the most extensible and customizable entertainment hub available. **[Get started building an add-on](https://kodi.tv/create-an-addon)**.
-* **Documentation:** Kodi's **[wiki pages](https://kodi.wiki/)** are the hub for information about Kodi and surrounding ecosystem. Help make our documentation better by writing new content or correcting existing material.
+Before installing a JJS LibreELEC TAR:
 
-**Not enough free time?** No problem! There are other ways to help Kodi.
+1. Connect the Toolbox to the LibreELEC system.
+2. Use **Rollback erstellen**. This creates a rollback TAR directly from the currently installed LibreELEC `KERNEL` and `SYSTEM`.
+3. Use **TAR laden** to store the JJS LibreELEC TAR on the device.
+4. Use **TAR als Update aktivieren** and reboot.
 
-* **Spread the word:** Share Kodi with the world! Tell your friends and family about how Kodi creates an amazing entertainment experience. Stay up to date on the latest stories about Kodi reading our **[news](https://kodi.tv/blog)** section, follow us on **[Twitter](https://twitter.com/koditv)** and **[Facebook](https://www.facebook.com/XBMC/)**, or **star Kodi's repo** if you want to follow development.
-* **Donate:** We are always happy to receive a **[donation](https://kodi.tv/contribute/donate)**. Donations are typically used for travel to attend conferences, any necessary paperwork and legal fees, and the yearly XBMC Foundation Developers Conference, where a great deal of coding and planning for the following year occurs. Donations may also be used to purchase necessary hardware and licenses for developers, along with t-shirts, stickers, and other accessories for conferences.
-* **Buy Kodi merchandise:** Purchasing Kodi gear helps just as much as a donation, and you get something in return! Checkout our **[store](https://kodi.tv/store)** for Kodi branded gear. We regularly add new products so check back often.
+The existing `/storage` data, including the Kodi profile, remains in place during the LibreELEC update.
 
-## Building
-Kodi uses CMake as its building system but instructions are highly dependent on your operating system and target platform. Fortunately **[we've got you covered](docs/README.md)**.
+**Rollback:** use **Rollback zurückspielen** in the Toolbox and reboot. This restores the LibreELEC system that was installed when the rollback was created.
 
-## Acknowledgements
-Kodi couldn't exist without
+---
 
-* All the **[contributors](https://github.com/xbmc/xbmc/graphs/contributors)**. Big or small a change, it does make a difference.
-* All the developers that write the fantastic **software and libraries** that Kodi uses. We stand on the shoulders of giants.
-* Our **[fantastic community](https://forum.kodi.tv/)** for the never ending support, inspiration, feedback, and for keeping us on our toes when we screw up!
-* **[Our sponsors](https://kodi.tv/sponsors)**. Without them, keeping a huge project like this alive would be next to impossible.
+## 3. What is changed?
 
-## License
-Kodi is **[GPLv2 licensed](LICENSE.md)**. You may use, distribute and copy it under the license terms.
+### Standard Kodi
 
-<a href="https://github.com/xbmc/xbmc/graphs/contributors"><img src="https://forthebadge.com/images/badges/built-by-developers.svg" height="25"></a>
-<a href="https://github.com/xbmc/xbmc"><img src="https://forthebadge.com/images/badges/certified-cousin-terio.svg" height="25"></a>
-<a href="https://github.com/xbmc/xbmc"><img src="https://forthebadge.com/images/badges/approved-by-george-costanza.svg" height="25"></a>
-<a href="https://kodi.tv/download"><img src="https://forthebadge.com/images/badges/check-it-out.svg" height="25"></a>
-<a href="https://github.com/xbmc/xbmc"><img src="https://forthebadge.com/images/badges/winter-is-coming.svg" height="25"></a>
+For consecutive RAW passthrough tracks, standard Kodi can drain and close the current AudioEngine stream and create a new one for the next track.
+
+For TrueHD / Atmos this can mean:
+
+`track ends → RAW stream closes → HDMI audio stops → new RAW stream opens → AVR resynchronizes → audio resumes`
+
+Even when both tracks use a compatible output format, that teardown can create an audible gap.
+
+### Kodi JJS
+
+Kodi JJS changes the PAPlayer / AudioEngine transition so that a compatible successor can take over the already-running RAW stream:
+
+`track ends → existing RAW / HDMI stream stays alive → next decoder takes over → playback continues`
+
+The normal Kodi drain/reopen path is still used when the actual RAW output format is not compatible.
+
+The JJS changes include:
+
+- **Seamless RAW handover in PAPlayer**  
+  The next compatible RAW decoder is prepared before the current track ends. At the boundary, the existing AudioEngine stream is transferred to the successor instead of being unnecessarily recreated.
+
+- **TrueHD MAT state preservation**  
+  MAT padding and timing state are carried across compatible seamless transitions so that the TrueHD / Atmos output remains continuous.
+
+- **RAW EOF backlog handling**  
+  End-of-file handling waits for pending RAW parser data to drain instead of treating demux EOF as if all packed audio had already been consumed.
+
+- **Chapter / end-offset fix**  
+  The upstream correction for chaptered audio ending too early is included.
+
+- **Manual PAPlayer transition lifecycle fix – JJS.004**  
+  Repeated manual track changes exposed a PAPlayer race where a stale start event could make a newly created playback thread exit before the new item became active. This could produce skipped tracks or a displayed track with stale elapsed time but no audio.
+
+  JJS.004 explicitly stops the previous PAPlayer worker for manual/select-item transitions, waits for outstanding queue work, closes the old streams and clears a stale `m_startEvent` before recreating the worker. The normal compatible RAW-to-RAW seamless handover remains unchanged.
+
+### Android identity
+
+Android builds use:
+
+- App name: **Kodi JJS**
+- Package: **`org.jjs.kodi`**
+
+This is what allows Kodi JJS and official Kodi (`org.xbmc.kodi`) to coexist on the same Android device.
+
+### Source and portability
+
+The JJS audio changes are in Kodi core and are not specific to NVIDIA Shield hardware.
+
+Current development branch: **`21.3-Omega-jjs`**
+
+For a more detailed technical description, see **[README.JJS.md](README.JJS.md)**.
+
+---
+
+## Upstream and license
+
+Kodi is developed by **Team Kodi / XBMC Foundation**. Kodi JJS is an independent, unofficial fork and is not affiliated with or endorsed by Team Kodi.
+
+This repository remains under Kodi's **GNU GPLv2** licensing.
+
+- [Official Kodi website](https://kodi.tv/)
+- [Official Kodi source](https://github.com/xbmc/xbmc)
+- [Kodi documentation](https://kodi.wiki/view/Main_Page)
+
+Kodi JJS is provided as-is, without warranty, support commitment or obligation to provide future updates.
