@@ -31,7 +31,7 @@ The Android build uses its own package name, **`org.jjs.kodi`**, so it can be in
 
 ## 2. How to test
 
-The fastest way to try Kodi JJS is with the
+The fastest way to try Kodi JJS is with my
 **[JJS KODI Toolbox](https://github.com/jjs-hamburg/jjs-kodi-toolbox)**.
 
 You can move an existing Kodi installation to Kodi JJS in roughly **10 minutes**, including add-ons, databases, settings, skins and the rest of the Kodi profile.
