@@ -718,13 +718,12 @@ bool PAPlayer::CloseFile(bool reopen)
 
   if (!m_isPaused)
     SoftStop(true, true);
+  CloseAllStreams(false);
 
-  /* stop PAPlayer before final stream cleanup */
+  /* wait for the thread to terminate */
   StopThread(true);//true - wait for end of thread
 
-  // A queued preparation job may still create an AE stream after Stop was
-  // requested. Wait for all such jobs first, then remove every stream so a
-  // stopped player cannot leave an orphan RAW stream in ActiveAE.
+  // wait for any pending jobs to complete
   {
     std::unique_lock<CCriticalSection> lock(m_streamsLock);
     while (m_jobCounter > 0)
@@ -734,8 +733,6 @@ bool PAPlayer::CloseFile(bool reopen)
       lock.lock();
     }
   }
-
-  CloseAllStreams(false);
   CServiceBroker::GetDataCacheCore().Reset();
   return true;
 }
