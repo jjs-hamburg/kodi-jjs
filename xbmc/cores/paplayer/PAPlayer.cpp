@@ -267,20 +267,26 @@ bool PAPlayer::OpenFile(const CFileItem& file, const CPlayerOptions &options)
       return false;
   }
 
-  bool closeBeforeOpen = rawFormatChange || !m_defaultCrossfadeMS || m_isPaused;
+  bool manualTransition = false;
   {
     std::unique_lock<CCriticalSection> lock(m_streamsLock);
-    closeBeforeOpen = closeBeforeOpen || m_streams.size() > 1;
+    // OpenFile() is the manual/select-item path. If a previous stream still
+    // exists here (active or finishing), it must not overlap the newly selected
+    // item. Compatible RAW->RAW already returned above through the seamless
+    // handover path.
+    manualTransition = !m_streams.empty() || !m_finishing.empty();
   }
+
+  bool closeBeforeOpen =
+      rawFormatChange || manualTransition || !m_defaultCrossfadeMS || m_isPaused;
 
   if (closeBeforeOpen)
   {
-    if (rawFormatChange)
+    if (rawFormatChange || manualTransition)
     {
-      // A manual next/previous across an incompatible audio format must leave
-      // no old or asynchronously prepared stream behind. Stop PAPlayer first,
-      // wait for all outstanding QueueNextFile jobs, then release every stream
-      // before preparing the selected item.
+      // Stop PAPlayer first, wait for all outstanding QueueNextFile jobs, then
+      // release every stream. This also covers PCM->RAW manual transitions where
+      // the old PCM stream may already have moved to m_finishing.
       StopThread(true);
       {
         std::unique_lock<CCriticalSection> lock(m_streamsLock);
