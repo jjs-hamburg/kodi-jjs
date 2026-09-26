@@ -2,7 +2,7 @@
 
 ## About Kodi JJS
 
-Kodi JJS is a personal fork of Kodi 21.2 Omega created to improve gapless playback of Dolby TrueHD / Atmos material when using RAW passthrough.
+Kodi JJS is a personal fork of Kodi 21.3 Omega created to improve gapless playback of Dolby TrueHD / Atmos material when using RAW passthrough.
 
 In standard Kodi, playback of consecutive TrueHD / Atmos tracks may tear down and recreate the RAW AudioEngine stream at a track boundary. Even when the following track uses the same compatible output format, this can force the HDMI receiver to resynchronize and produce an audible gap.
 
