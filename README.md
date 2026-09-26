@@ -17,6 +17,8 @@ The result is simple:
 
 Kodi JJS otherwise stays as close as possible to standard Kodi. The project does not try to redesign Kodi or replace working upstream behaviour.
 
+I originally created Kodi JJS for my own personal use because the audible interruptions in TrueHD / Atmos playback bothered me enough to fix them. I am making the source code and builds available for anyone else who has the same problem and may find this fork useful.
+
 ### Current Android release
 
 **Kodi JJS 21.3-JJS.004 – Android ARM64**
@@ -51,13 +53,13 @@ Because Kodi JJS uses a separate Android package, the existing Kodi installation
 Before installing a JJS LibreELEC TAR:
 
 1. Connect the Toolbox to the LibreELEC system.
-2. Use **Rollback erstellen**. This creates a rollback TAR directly from the currently installed LibreELEC `KERNEL` and `SYSTEM`.
-3. Use **TAR laden** to store the JJS LibreELEC TAR on the device.
-4. Use **TAR als Update aktivieren** and reboot.
+2. Use **Create rollback**. This creates a rollback TAR directly from the currently installed LibreELEC `KERNEL` and `SYSTEM`.
+3. Use **Download TAR** to store the JJS LibreELEC TAR on the device.
+4. Use **Activate TAR as update** and reboot.
 
 The existing `/storage` data, including the Kodi profile, remains in place during the LibreELEC update.
 
-**Rollback:** use **Rollback zurückspielen** in the Toolbox and reboot. This restores the LibreELEC system that was installed when the rollback was created.
+**Rollback:** use **Restore rollback** in the Toolbox and reboot. This restores the LibreELEC system that was installed when the rollback was created.
 
 ---
 
