@@ -43,7 +43,9 @@ jobs:
           grep -Fq "Kodi source commit: ${SOURCE_COMMIT}" BUILD-INFO.txt
           grep -Fq "Version: 21.3-JJS.004 (2103000)" BUILD-INFO.txt
           grep -Fq "Android package: org.jjs.kodi" BUILD-INFO.txt
-          sha256sum -c SHA256SUMS.txt
+          EXPECTED_SHA256="$(awk '{print $1; exit}' SHA256SUMS.txt)"
+          ACTUAL_SHA256="$(sha256sum "${APK}" | awk '{print $1}')"
+          test "${ACTUAL_SHA256}" = "${EXPECTED_SHA256}"
 
       - name: Publish GitHub release from existing tested APK
         env:
