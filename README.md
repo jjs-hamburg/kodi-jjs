@@ -48,7 +48,7 @@ Because Kodi JJS uses a separate Android package, the existing Kodi installation
 
 **Rollback:** simply start the original Kodi again. If you no longer want Kodi JJS, uninstall it.
 
-### LibreELEC
+### LibreELEC (Coming Soon)
 
 Before installing a JJS LibreELEC TAR:
 
