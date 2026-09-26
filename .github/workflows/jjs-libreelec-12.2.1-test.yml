@@ -153,6 +153,14 @@ jobs:
             LibreELEC.tv/config/optimize
           grep '^HOST_CFLAGS=' LibreELEC.tv/config/optimize
 
+          # spdlog links against imported libfmt. With LibreELEC's cross CMake
+          # toolchain, imported include dirs can otherwise become
+          # "-isystem <sysroot>/usr/include" ahead of libstdc++ headers.
+          # That breaks libstdc++'s #include_next <stdlib.h> on a fresh compile.
+          printf '\nPKG_CMAKE_OPTS_TARGET+=" -DCMAKE_NO_SYSTEM_FROM_IMPORTED=ON"\n' \
+            >> LibreELEC.tv/packages/devel/spdlog/package.mk
+          tail -n 3 LibreELEC.tv/packages/devel/spdlog/package.mk
+
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
 
@@ -431,6 +439,14 @@ jobs:
             's/^HOST_CFLAGS="-march=native /HOST_CFLAGS="-march=x86-64 /' \
             LibreELEC.tv/config/optimize
           grep '^HOST_CFLAGS=' LibreELEC.tv/config/optimize
+
+          # spdlog links against imported libfmt. With LibreELEC's cross CMake
+          # toolchain, imported include dirs can otherwise become
+          # "-isystem <sysroot>/usr/include" ahead of libstdc++ headers.
+          # That breaks libstdc++'s #include_next <stdlib.h> on a fresh compile.
+          printf '\nPKG_CMAKE_OPTS_TARGET+=" -DCMAKE_NO_SYSTEM_FROM_IMPORTED=ON"\n' \
+            >> LibreELEC.tv/packages/devel/spdlog/package.mk
+          tail -n 3 LibreELEC.tv/packages/devel/spdlog/package.mk
 
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
