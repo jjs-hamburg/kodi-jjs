@@ -239,6 +239,17 @@ bool PAPlayer::OpenFile(const CFileItem& file, const CPlayerOptions &options)
       1000;
   m_fullScreen = options.fullscreen;
 
+  {
+    std::unique_lock<CCriticalSection> lock(m_streamsLock);
+    CLog::Log(LOGWARNING,
+              "JJS PA DIAG OpenFile enter: guiTime={} ms streams={} finishing={} current={} "
+              "currentStarted={} currentFrames={}",
+              m_playerGUIData.m_time, m_streams.size(), m_finishing.size(),
+              m_currentStream ? 1 : 0,
+              m_currentStream ? (m_currentStream->m_started ? 1 : 0) : -1,
+              m_currentStream ? m_currentStream->m_framesSent : -1);
+  }
+
   // Manual next/previous normally reaches PAPlayer through OpenFile(). If the
   // current output is RAW, first try the same seamless handover used for
   // automatic playlist advancement. Only a real format change falls back to
@@ -298,6 +309,14 @@ bool PAPlayer::OpenFile(const CFileItem& file, const CPlayerOptions &options)
         }
       }
       CloseAllStreams(false);
+      {
+        std::unique_lock<CCriticalSection> lock(m_streamsLock);
+        CLog::Log(LOGWARNING,
+                  "JJS PA DIAG OpenFile cleanup done: guiTime={} ms streams={} finishing={} "
+                  "current={}",
+                  m_playerGUIData.m_time, m_streams.size(), m_finishing.size(),
+                  m_currentStream ? 1 : 0);
+      }
     }
     else
     {
@@ -313,6 +332,7 @@ bool PAPlayer::OpenFile(const CFileItem& file, const CPlayerOptions &options)
   }
   CServiceBroker::GetJobManager()->Submit([=]() { QueueNextFileEx(file, false); }, this,
                                           CJob::PRIORITY_NORMAL);
+  CLog::Log(LOGWARNING, "JJS PA DIAG OpenFile submitted: guiTime={} ms", m_playerGUIData.m_time);
 
   std::unique_lock<CCriticalSection> lock(m_streamsLock);
   if (m_streams.size() == 2)
@@ -818,6 +838,11 @@ inline void PAPlayer::ProcessStreams(double &freeBufferTime)
     StreamInfo* si = *itt;
     if (!m_currentStream && !si->m_started)
     {
+      CLog::Log(LOGWARNING,
+                "JJS PA DIAG ProcessStreams select current: guiTime={} ms frames={} started={} "
+                "streams={} finishing={}",
+                m_playerGUIData.m_time, si->m_framesSent, si->m_started ? 1 : 0,
+                m_streams.size(), m_finishing.size());
       m_currentStream = si;
       UpdateGUIData(si); //update for GUI
     }
@@ -1061,6 +1086,11 @@ inline bool PAPlayer::ProcessStream(StreamInfo *si, double &freeBufferTime)
   /* if playback needs to start on this stream, do it */
   if (si == m_currentStream && !si->m_started)
   {
+    CLog::Log(LOGWARNING,
+              "JJS PA DIAG ProcessStream start: guiTime={} ms frames={} seekFrame={} startOffset={} "
+              "space={}",
+              m_playerGUIData.m_time, si->m_framesSent, si->m_seekFrame, si->m_startOffset,
+              si->m_stream ? si->m_stream->GetSpace() : 0);
     si->m_started = true;
     si->m_stream->RegisterAudioCallback(m_audioCallback);
     if (!si->m_isSlaved)
@@ -1512,6 +1542,11 @@ void PAPlayer::UpdateGUIData(StreamInfo *si)
     total = m_currentStream->m_endOffset;
   total -= m_currentStream->m_startOffset;
   m_playerGUIData.m_totalTime = total;
+
+  CLog::Log(LOGWARNING,
+            "JJS PA DIAG UpdateGUIData: guiTime={} ms total={} frames={} started={} startOffset={}",
+            m_playerGUIData.m_time, m_playerGUIData.m_totalTime, si->m_framesSent,
+            si->m_started ? 1 : 0, si->m_startOffset);
 
   CServiceBroker::GetDataCacheCore().SignalAudioInfoChange();
 }
