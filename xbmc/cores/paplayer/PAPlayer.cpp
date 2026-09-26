@@ -239,17 +239,6 @@ bool PAPlayer::OpenFile(const CFileItem& file, const CPlayerOptions &options)
       1000;
   m_fullScreen = options.fullscreen;
 
-  {
-    std::unique_lock<CCriticalSection> lock(m_streamsLock);
-    CLog::Log(LOGWARNING,
-              "JJS PA DIAG OpenFile enter: guiTime={} ms streams={} finishing={} current={} "
-              "currentStarted={} currentFrames={}",
-              m_playerGUIData.m_time, m_streams.size(), m_finishing.size(),
-              m_currentStream ? 1 : 0,
-              m_currentStream ? (m_currentStream->m_started ? 1 : 0) : -1,
-              m_currentStream ? m_currentStream->m_framesSent : -1);
-  }
-
   // Manual next/previous normally reaches PAPlayer through OpenFile(). If the
   // current output is RAW, first try the same seamless handover used for
   // automatic playlist advancement. Only a real format change falls back to
@@ -309,14 +298,6 @@ bool PAPlayer::OpenFile(const CFileItem& file, const CPlayerOptions &options)
         }
       }
       CloseAllStreams(false);
-      {
-        std::unique_lock<CCriticalSection> lock(m_streamsLock);
-        CLog::Log(LOGWARNING,
-                  "JJS PA DIAG OpenFile cleanup done: guiTime={} ms streams={} finishing={} "
-                  "current={}",
-                  m_playerGUIData.m_time, m_streams.size(), m_finishing.size(),
-                  m_currentStream ? 1 : 0);
-      }
     }
     else
     {
@@ -332,7 +313,6 @@ bool PAPlayer::OpenFile(const CFileItem& file, const CPlayerOptions &options)
   }
   CServiceBroker::GetJobManager()->Submit([=]() { QueueNextFileEx(file, false); }, this,
                                           CJob::PRIORITY_NORMAL);
-  CLog::Log(LOGWARNING, "JJS PA DIAG OpenFile submitted: guiTime={} ms", m_playerGUIData.m_time);
 
   std::unique_lock<CCriticalSection> lock(m_streamsLock);
   if (m_streams.size() == 2)
@@ -347,11 +327,6 @@ bool PAPlayer::OpenFile(const CFileItem& file, const CPlayerOptions &options)
   }
   lock.unlock();
 
-  CLog::Log(LOGWARNING,
-            "JJS PA THREAD DIAG before Create: running={} isPlaying={} isFinished={} "
-            "bStop={} jobs={}",
-            IsRunning() ? 1 : 0, m_isPlaying ? 1 : 0, m_isFinished ? 1 : 0,
-            m_bStop ? 1 : 0, m_jobCounter);
   if (!IsRunning())
   {
     // OpenFile() may have signaled m_startEvent while the previous PAPlayer thread
@@ -360,21 +335,11 @@ bool PAPlayer::OpenFile(const CFileItem& file, const CPlayerOptions &options)
     // m_isPlaying=true. Clear the stale signal before restarting the thread.
     m_startEvent.Reset();
     Create();
-    CLog::Log(LOGWARNING,
-              "JJS PA THREAD DIAG after Create: running={} isPlaying={} isFinished={} "
-              "bStop={} jobs={}",
-              IsRunning() ? 1 : 0, m_isPlaying ? 1 : 0, m_isFinished ? 1 : 0,
-              m_bStop ? 1 : 0, m_jobCounter);
   }
 
   /* trigger playback start */
   m_isPlaying = true;
   m_startEvent.Set();
-  CLog::Log(LOGWARNING,
-            "JJS PA THREAD DIAG start signaled: running={} isPlaying={} isFinished={} "
-            "bStop={} jobs={}",
-            IsRunning() ? 1 : 0, m_isPlaying ? 1 : 0, m_isFinished ? 1 : 0,
-            m_bStop ? 1 : 0, m_jobCounter);
 
   // OnPlayBackStarted to be made only once. Callback processing may be slower than player process
   // so clear signal flag first otherwise async stream processing could also make callback
@@ -781,16 +746,7 @@ bool PAPlayer::CloseFile(bool reopen)
 
 void PAPlayer::Process()
 {
-  CLog::Log(LOGWARNING,
-            "JJS PA THREAD DIAG Process enter: isPlaying={} isFinished={} bStop={} jobs={}",
-            m_isPlaying ? 1 : 0, m_isFinished ? 1 : 0, m_bStop ? 1 : 0, m_jobCounter);
-  const bool gotStartEvent = m_startEvent.Wait(100ms);
-  CLog::Log(LOGWARNING,
-            "JJS PA THREAD DIAG Process wait done: gotStart={} isPlaying={} isFinished={} "
-            "bStop={} jobs={}",
-            gotStartEvent ? 1 : 0, m_isPlaying ? 1 : 0, m_isFinished ? 1 : 0,
-            m_bStop ? 1 : 0, m_jobCounter);
-  if (!gotStartEvent)
+  if (!m_startEvent.Wait(100ms))
   {
     CLog::Log(LOGDEBUG, "PAPlayer::Process - Failed to receive start event");
     return;
@@ -833,11 +789,6 @@ void PAPlayer::Process()
 
     GetTimeInternal(); //update for GUI
   }
-  CLog::Log(LOGWARNING,
-            "JJS PA THREAD DIAG Process exit: isPlaying={} isFinished={} bStop={} jobs={} "
-            "streams={} finishing={}",
-            m_isPlaying ? 1 : 0, m_isFinished ? 1 : 0, m_bStop ? 1 : 0, m_jobCounter,
-            m_streams.size(), m_finishing.size());
   m_isPlaying = false;
 }
 
@@ -846,9 +797,6 @@ inline void PAPlayer::ProcessStreams(double &freeBufferTime)
   std::unique_lock<CCriticalSection> sharedLock(m_streamsLock);
   if (m_isFinished && m_streams.empty() && m_finishing.empty())
   {
-    CLog::Log(LOGWARNING,
-              "JJS PA THREAD DIAG ProcessStreams finish exit: jobs={} isPlaying={} bStop={}",
-              m_jobCounter, m_isPlaying ? 1 : 0, m_bStop ? 1 : 0);
     m_isPlaying = false;
     freeBufferTime = 1.0;
     return;
@@ -877,11 +825,6 @@ inline void PAPlayer::ProcessStreams(double &freeBufferTime)
     StreamInfo* si = *itt;
     if (!m_currentStream && !si->m_started)
     {
-      CLog::Log(LOGWARNING,
-                "JJS PA DIAG ProcessStreams select current: guiTime={} ms frames={} started={} "
-                "streams={} finishing={}",
-                m_playerGUIData.m_time, si->m_framesSent, si->m_started ? 1 : 0,
-                m_streams.size(), m_finishing.size());
       m_currentStream = si;
       UpdateGUIData(si); //update for GUI
     }
@@ -1125,11 +1068,6 @@ inline bool PAPlayer::ProcessStream(StreamInfo *si, double &freeBufferTime)
   /* if playback needs to start on this stream, do it */
   if (si == m_currentStream && !si->m_started)
   {
-    CLog::Log(LOGWARNING,
-              "JJS PA DIAG ProcessStream start: guiTime={} ms frames={} seekFrame={} startOffset={} "
-              "space={}",
-              m_playerGUIData.m_time, si->m_framesSent, si->m_seekFrame, si->m_startOffset,
-              si->m_stream ? si->m_stream->GetSpace() : 0);
     si->m_started = true;
     si->m_stream->RegisterAudioCallback(m_audioCallback);
     if (!si->m_isSlaved)
@@ -1582,11 +1520,6 @@ void PAPlayer::UpdateGUIData(StreamInfo *si)
   total -= m_currentStream->m_startOffset;
   m_playerGUIData.m_totalTime = total;
 
-  CLog::Log(LOGWARNING,
-            "JJS PA DIAG UpdateGUIData: guiTime={} ms total={} frames={} started={} startOffset={}",
-            m_playerGUIData.m_time, m_playerGUIData.m_totalTime, si->m_framesSent,
-            si->m_started ? 1 : 0, si->m_startOffset);
-
   CServiceBroker::GetDataCacheCore().SignalAudioInfoChange();
 }
 
@@ -1594,11 +1527,6 @@ void PAPlayer::OnJobComplete(unsigned int jobID, bool success, CJob *job)
 {
   std::unique_lock<CCriticalSection> lock(m_streamsLock);
   m_jobCounter--;
-  CLog::Log(LOGWARNING,
-            "JJS PA THREAD DIAG job complete: success={} jobs={} streams={} finishing={} "
-            "current={} isPlaying={} isFinished={}",
-            success ? 1 : 0, m_jobCounter, m_streams.size(), m_finishing.size(),
-            m_currentStream ? 1 : 0, m_isPlaying ? 1 : 0, m_isFinished ? 1 : 0);
   m_jobEvent.Set();
 }
 
