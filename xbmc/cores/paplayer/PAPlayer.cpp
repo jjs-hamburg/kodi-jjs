@@ -354,6 +354,11 @@ bool PAPlayer::OpenFile(const CFileItem& file, const CPlayerOptions &options)
             m_bStop ? 1 : 0, m_jobCounter);
   if (!IsRunning())
   {
+    // OpenFile() may have signaled m_startEvent while the previous PAPlayer thread
+    // was already running past its initial Wait(). That signal remains pending and
+    // would let a newly created thread pass Wait() before this OpenFile() has set
+    // m_isPlaying=true. Clear the stale signal before restarting the thread.
+    m_startEvent.Reset();
     Create();
     CLog::Log(LOGWARNING,
               "JJS PA THREAD DIAG after Create: running={} isPlaying={} isFinished={} "
