@@ -70,7 +70,7 @@ jobs:
           EOF
 
           if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            gh release upload "${RELEASE_TAG}"               "${APK}"               artifact/SHA256SUMS.txt               artifact/BUILD-INFO.txt               artifact/AAPT-BADGING.txt               artifact/APKSIGNER-VERIFY.txt               --clobber
+            gh release upload "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}"               "${APK}"               artifact/SHA256SUMS.txt               artifact/BUILD-INFO.txt               artifact/AAPT-BADGING.txt               artifact/APKSIGNER-VERIFY.txt               --clobber
           else
-            gh release create "${RELEASE_TAG}"               --target "${SOURCE_COMMIT}"               --title "${RELEASE_TITLE}"               --notes-file RELEASE-NOTES.md               "${APK}"               artifact/SHA256SUMS.txt               artifact/BUILD-INFO.txt               artifact/AAPT-BADGING.txt               artifact/APKSIGNER-VERIFY.txt
+            gh release create "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}"               --target "${SOURCE_COMMIT}"               --title "${RELEASE_TITLE}"               --notes-file RELEASE-NOTES.md               "${APK}"               artifact/SHA256SUMS.txt               artifact/BUILD-INFO.txt               artifact/AAPT-BADGING.txt               artifact/APKSIGNER-VERIFY.txt
           fi
