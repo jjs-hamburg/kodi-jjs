@@ -1,4 +1,4 @@
-name: Build LibreELEC 12.2.1 Generic x86_64 JJS TEST
+name: Build LibreELEC 12.2.1 Generic x86_64 JJS
 
 on:
   workflow_dispatch:
@@ -156,7 +156,7 @@ jobs:
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
 
-          sed -i 's/LIBREELEC_VERSION="devel"/LIBREELEC_VERSION="12.2.1-JJS.004-Test"/' \
+          sed -i 's/LIBREELEC_VERSION="devel"/LIBREELEC_VERSION="12.2.1-JJS.004"/' \
             LibreELEC.tv/distributions/LibreELEC/version
 
       - name: Cache LibreELEC source archives
@@ -563,7 +563,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          sed -i 's/LIBREELEC_VERSION="devel"/LIBREELEC_VERSION="12.2.1-JJS.004-Test"/' \
+          sed -i 's/LIBREELEC_VERSION="devel"/LIBREELEC_VERSION="12.2.1-JJS.004"/' \
             LibreELEC.tv/distributions/LibreELEC/version
           grep LIBREELEC_VERSION LibreELEC.tv/distributions/LibreELEC/version
 
@@ -630,7 +630,7 @@ jobs:
         if: steps.build_image.outputs.complete == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: LibreELEC-Generic-x86_64-12.2.1-JJS.004-Test
+          name: LibreELEC-Generic-x86_64-12.2.1-JJS.004
           if-no-files-found: error
           retention-days: 14
           path: |
