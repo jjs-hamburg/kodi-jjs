@@ -69,7 +69,7 @@ jobs:
           - Source workflow run: 36256073797
           EOF
 
-          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             gh release upload "${RELEASE_TAG}"               "${APK}"               artifact/SHA256SUMS.txt               artifact/BUILD-INFO.txt               artifact/AAPT-BADGING.txt               artifact/APKSIGNER-VERIFY.txt               --clobber
           else
             gh release create "${RELEASE_TAG}"               --target "${SOURCE_COMMIT}"               --title "${RELEASE_TITLE}"               --notes-file RELEASE-NOTES.md               "${APK}"               artifact/SHA256SUMS.txt               artifact/BUILD-INFO.txt               artifact/AAPT-BADGING.txt               artifact/APKSIGNER-VERIFY.txt
