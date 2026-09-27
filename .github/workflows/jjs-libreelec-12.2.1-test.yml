@@ -161,26 +161,32 @@ jobs:
             >> LibreELEC.tv/packages/devel/spdlog/package.mk
           tail -n 3 LibreELEC.tv/packages/devel/spdlog/package.mk
 
-          # Kodi consumes the imported spdlog/libfmt targets. Apply the option
-          # to Kodi's CMake configuration so sysroot/usr/include keeps GCC's
-          # normal system-header position and #include_next <stdlib.h> works.
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("LibreELEC.tv/packages/mediacenter/kodi/package.mk")
-          lines = path.read_text(encoding="utf-8").splitlines()
-          needle = "                         -DENABLE_INTERNAL_SPDLOG=OFF " + chr(92)
-          option = "                         -DCMAKE_NO_SYSTEM_FROM_IMPORTED=ON " + chr(92)
-
-          if lines.count(needle) != 1:
-              raise SystemExit("Unexpected Kodi CMake option layout")
-          if option not in lines:
-              lines.insert(lines.index(needle) + 1, option)
-
-          path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-          PY
-          grep -A2 -- '-DENABLE_INTERNAL_SPDLOG=OFF' \
-            LibreELEC.tv/packages/mediacenter/kodi/package.mk
+          # The cross compiler already searches the sysroot's /usr/include.
+          # Tell Kodi's CMake build that this directory is implicit so imported
+          # dependencies cannot emit it early as -isystem and break
+          # libstdc++'s #include_next <stdlib.h>.
+          KODI_INCLUDE_PATCH="LibreELEC.tv/packages/mediacenter/kodi/patches/kodi-999.89-cross-implicit-include.patch"
+          printf '%s\n' \
+            '--- a/CMakeLists.txt' \
+            '+++ b/CMakeLists.txt' \
+            '@@ -4,6 +4,16 @@' \
+            '   cmake_minimum_required(VERSION 3.20)' \
+            ' endif()' \
+            ' project(kodi LANGUAGES CXX C ASM)' \
+            ' ' \
+            "+# LibreELEC's cross compiler already searches the target sysroot's" \
+            '+# /usr/include implicitly. Mark it as implicit in CMake too, otherwise' \
+            '+# imported targets can move it ahead of libstdc++ and break include_next.' \
+            '+if(CMAKE_CROSSCOMPILING AND CMAKE_FIND_ROOT_PATH)' \
+            '+  list(GET CMAKE_FIND_ROOT_PATH 0 KODI_CROSS_ROOT)' \
+            '+  set(KODI_CROSS_SYSTEM_INCLUDE "${KODI_CROSS_ROOT}/usr/include")' \
+            '+  list(APPEND CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES "${KODI_CROSS_SYSTEM_INCLUDE}")' \
+            '+  list(APPEND CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES "${KODI_CROSS_SYSTEM_INCLUDE}")' \
+            '+endif()' \
+            '+' \
+            ' if(POLICY CMP0069)' \
+            '   set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)' \
+            > "$KODI_INCLUDE_PATCH"
 
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
@@ -469,26 +475,32 @@ jobs:
             >> LibreELEC.tv/packages/devel/spdlog/package.mk
           tail -n 3 LibreELEC.tv/packages/devel/spdlog/package.mk
 
-          # Kodi consumes the imported spdlog/libfmt targets. Apply the option
-          # to Kodi's CMake configuration so sysroot/usr/include keeps GCC's
-          # normal system-header position and #include_next <stdlib.h> works.
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("LibreELEC.tv/packages/mediacenter/kodi/package.mk")
-          lines = path.read_text(encoding="utf-8").splitlines()
-          needle = "                         -DENABLE_INTERNAL_SPDLOG=OFF " + chr(92)
-          option = "                         -DCMAKE_NO_SYSTEM_FROM_IMPORTED=ON " + chr(92)
-
-          if lines.count(needle) != 1:
-              raise SystemExit("Unexpected Kodi CMake option layout")
-          if option not in lines:
-              lines.insert(lines.index(needle) + 1, option)
-
-          path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-          PY
-          grep -A2 -- '-DENABLE_INTERNAL_SPDLOG=OFF' \
-            LibreELEC.tv/packages/mediacenter/kodi/package.mk
+          # The cross compiler already searches the sysroot's /usr/include.
+          # Tell Kodi's CMake build that this directory is implicit so imported
+          # dependencies cannot emit it early as -isystem and break
+          # libstdc++'s #include_next <stdlib.h>.
+          KODI_INCLUDE_PATCH="LibreELEC.tv/packages/mediacenter/kodi/patches/kodi-999.89-cross-implicit-include.patch"
+          printf '%s\n' \
+            '--- a/CMakeLists.txt' \
+            '+++ b/CMakeLists.txt' \
+            '@@ -4,6 +4,16 @@' \
+            '   cmake_minimum_required(VERSION 3.20)' \
+            ' endif()' \
+            ' project(kodi LANGUAGES CXX C ASM)' \
+            ' ' \
+            "+# LibreELEC's cross compiler already searches the target sysroot's" \
+            '+# /usr/include implicitly. Mark it as implicit in CMake too, otherwise' \
+            '+# imported targets can move it ahead of libstdc++ and break include_next.' \
+            '+if(CMAKE_CROSSCOMPILING AND CMAKE_FIND_ROOT_PATH)' \
+            '+  list(GET CMAKE_FIND_ROOT_PATH 0 KODI_CROSS_ROOT)' \
+            '+  set(KODI_CROSS_SYSTEM_INCLUDE "${KODI_CROSS_ROOT}/usr/include")' \
+            '+  list(APPEND CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES "${KODI_CROSS_SYSTEM_INCLUDE}")' \
+            '+  list(APPEND CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES "${KODI_CROSS_SYSTEM_INCLUDE}")' \
+            '+endif()' \
+            '+' \
+            ' if(POLICY CMP0069)' \
+            '   set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)' \
+            > "$KODI_INCLUDE_PATCH"
 
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
