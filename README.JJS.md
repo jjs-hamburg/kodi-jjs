@@ -15,7 +15,9 @@ tracks.
   At the boundary, Kodi transfers the already-running AudioEngine stream to the
   successor decoder instead of draining and recreating it. Potentially blocking
   decoder teardown and playback callbacks are moved away from the PAPlayer audio
-  thread.
+  thread. Playback-start callbacks use dedicated JobManager workers so the GUI
+  title and playlist position update immediately instead of waiting behind normal
+  background jobs.
 
 - **TrueHD MAT seamless-branch handling**  
   TrueHD output-timing discontinuities are handled as seamless branch points.
