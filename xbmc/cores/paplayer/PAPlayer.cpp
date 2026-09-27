@@ -961,12 +961,47 @@ inline void PAPlayer::ProcessStreams(double &freeBufferTime)
           m_signalStarted = true;
           IPlayerCallback* callback = &m_callback;
           CFileItem callbackFile(*next->m_fileItem);
+          const auto callbackQueuedAt = std::chrono::steady_clock::now();
+          CLog::Log(LOGINFO,
+                    "JJS CALLBACK DIAG RAW submit: signalStart={} file={}",
+                    signalPlaybackStarted ? 1 : 0, callbackFile.GetPath());
           CServiceBroker::GetJobManager()->Submit(
-              [callback, callbackFile, signalPlaybackStarted]()
+              [callback, callbackFile, signalPlaybackStarted, callbackQueuedAt]()
               {
+                const auto jobStartedAt = std::chrono::steady_clock::now();
+                CLog::Log(
+                    LOGINFO,
+                    "JJS CALLBACK DIAG RAW job-start: queueWait={} ms file={}",
+                    std::chrono::duration_cast<std::chrono::milliseconds>(jobStartedAt -
+                                                                         callbackQueuedAt)
+                        .count(),
+                    callbackFile.GetPath());
+
+                const auto playbackStartedBegin = std::chrono::steady_clock::now();
                 if (signalPlaybackStarted)
                   callback->OnPlayBackStarted(callbackFile);
+                const auto playbackStartedEnd = std::chrono::steady_clock::now();
+
                 callback->OnAVStarted(callbackFile);
+                const auto avStartedEnd = std::chrono::steady_clock::now();
+
+                CLog::Log(
+                    LOGINFO,
+                    "JJS CALLBACK DIAG RAW done: queueWait={} ms OnPlayBackStarted={} ms "
+                    "OnAVStarted={} ms total={} ms file={}",
+                    std::chrono::duration_cast<std::chrono::milliseconds>(jobStartedAt -
+                                                                         callbackQueuedAt)
+                        .count(),
+                    std::chrono::duration_cast<std::chrono::milliseconds>(playbackStartedEnd -
+                                                                         playbackStartedBegin)
+                        .count(),
+                    std::chrono::duration_cast<std::chrono::milliseconds>(avStartedEnd -
+                                                                         playbackStartedEnd)
+                        .count(),
+                    std::chrono::duration_cast<std::chrono::milliseconds>(avStartedEnd -
+                                                                         callbackQueuedAt)
+                        .count(),
+                    callbackFile.GetPath());
               },
               CJob::PRIORITY_NORMAL);
 
@@ -1201,12 +1236,47 @@ inline bool PAPlayer::ProcessStream(StreamInfo *si, double &freeBufferTime)
     const CFileItem callbackFile(*sameFileCallbackFile);
     const bool signalPlaybackStarted = sameFileSignalPlaybackStarted;
 
+    const auto callbackQueuedAt = std::chrono::steady_clock::now();
+    CLog::Log(LOGINFO,
+              "JJS CALLBACK DIAG SAMEFILE submit: signalStart={} file={}",
+              signalPlaybackStarted ? 1 : 0, callbackFile.GetPath());
     CServiceBroker::GetJobManager()->Submit(
-        [callback, callbackFile, signalPlaybackStarted]()
+        [callback, callbackFile, signalPlaybackStarted, callbackQueuedAt]()
         {
+          const auto jobStartedAt = std::chrono::steady_clock::now();
+          CLog::Log(
+              LOGINFO,
+              "JJS CALLBACK DIAG SAMEFILE job-start: queueWait={} ms file={}",
+              std::chrono::duration_cast<std::chrono::milliseconds>(jobStartedAt -
+                                                                   callbackQueuedAt)
+                  .count(),
+              callbackFile.GetPath());
+
+          const auto playbackStartedBegin = std::chrono::steady_clock::now();
           if (signalPlaybackStarted)
             callback->OnPlayBackStarted(callbackFile);
+          const auto playbackStartedEnd = std::chrono::steady_clock::now();
+
           callback->OnAVStarted(callbackFile);
+          const auto avStartedEnd = std::chrono::steady_clock::now();
+
+          CLog::Log(
+              LOGINFO,
+              "JJS CALLBACK DIAG SAMEFILE done: queueWait={} ms OnPlayBackStarted={} ms "
+              "OnAVStarted={} ms total={} ms file={}",
+              std::chrono::duration_cast<std::chrono::milliseconds>(jobStartedAt -
+                                                                   callbackQueuedAt)
+                  .count(),
+              std::chrono::duration_cast<std::chrono::milliseconds>(playbackStartedEnd -
+                                                                   playbackStartedBegin)
+                  .count(),
+              std::chrono::duration_cast<std::chrono::milliseconds>(avStartedEnd -
+                                                                   playbackStartedEnd)
+                  .count(),
+              std::chrono::duration_cast<std::chrono::milliseconds>(avStartedEnd -
+                                                                   callbackQueuedAt)
+                  .count(),
+              callbackFile.GetPath());
         },
         CJob::PRIORITY_NORMAL);
   }
