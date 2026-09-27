@@ -161,6 +161,27 @@ jobs:
             >> LibreELEC.tv/packages/devel/spdlog/package.mk
           tail -n 3 LibreELEC.tv/packages/devel/spdlog/package.mk
 
+          # Kodi consumes the imported spdlog/libfmt targets. Apply the option
+          # to Kodi's CMake configuration so sysroot/usr/include keeps GCC's
+          # normal system-header position and #include_next <stdlib.h> works.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("LibreELEC.tv/packages/mediacenter/kodi/package.mk")
+          lines = path.read_text(encoding="utf-8").splitlines()
+          needle = "                         -DENABLE_INTERNAL_SPDLOG=OFF " + chr(92)
+          option = "                         -DCMAKE_NO_SYSTEM_FROM_IMPORTED=ON " + chr(92)
+
+          if lines.count(needle) != 1:
+              raise SystemExit("Unexpected Kodi CMake option layout")
+          if option not in lines:
+              lines.insert(lines.index(needle) + 1, option)
+
+          path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+          grep -A2 -- '-DENABLE_INTERNAL_SPDLOG=OFF' \
+            LibreELEC.tv/packages/mediacenter/kodi/package.mk
+
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
 
@@ -448,6 +469,27 @@ jobs:
             >> LibreELEC.tv/packages/devel/spdlog/package.mk
           tail -n 3 LibreELEC.tv/packages/devel/spdlog/package.mk
 
+          # Kodi consumes the imported spdlog/libfmt targets. Apply the option
+          # to Kodi's CMake configuration so sysroot/usr/include keeps GCC's
+          # normal system-header position and #include_next <stdlib.h> works.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("LibreELEC.tv/packages/mediacenter/kodi/package.mk")
+          lines = path.read_text(encoding="utf-8").splitlines()
+          needle = "                         -DENABLE_INTERNAL_SPDLOG=OFF " + chr(92)
+          option = "                         -DCMAKE_NO_SYSTEM_FROM_IMPORTED=ON " + chr(92)
+
+          if lines.count(needle) != 1:
+              raise SystemExit("Unexpected Kodi CMake option layout")
+          if option not in lines:
+              lines.insert(lines.index(needle) + 1, option)
+
+          path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+          grep -A2 -- '-DENABLE_INTERNAL_SPDLOG=OFF' \
+            LibreELEC.tv/packages/mediacenter/kodi/package.mk
+
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
 
@@ -601,6 +643,7 @@ jobs:
             bash -o pipefail -c 'make image 2>&1 | tee "${GITHUB_WORKSPACE}/libreelec-build.log"'
           rc=$?
           set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
           if [ "$rc" -eq 0 ]; then
             echo "complete=true" >> "$GITHUB_OUTPUT"
           else
@@ -631,14 +674,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tail -n 1000 libreelec-build.log > libreelec-build-tail.log
+          DIAG_DIR="libreelec-build-diagnostics"
+          rm -rf "$DIAG_DIR"
+          mkdir -p "$DIAG_DIR/thread-logs"
+          tail -n 1000 libreelec-build.log > "$DIAG_DIR/libreelec-build-tail.log"
+          printf 'LibreELEC build rc=%s\n' "${{ steps.build_image.outputs.rc }}" \
+            > "$DIAG_DIR/build-result.txt"
+
+          while IFS= read -r -d '' log_file; do
+            relative="${log_file#LibreELEC.tv/}"
+            destination="$DIAG_DIR/thread-logs/$relative"
+            mkdir -p "$(dirname "$destination")"
+            cp "$log_file" "$destination"
+          done < <(find LibreELEC.tv -path '*/.threads/logs/*.log' -type f -print0)
+
+          find "$DIAG_DIR" -type f -printf '%P  %s bytes\n' | sort
 
       - name: Upload LibreELEC build diagnostics
         if: steps.build_image.outputs.complete != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: LibreELEC-JJS.004-build-diagnostics
-          path: libreelec-build-tail.log
+          path: libreelec-build-diagnostics
           if-no-files-found: error
           retention-days: 14
 
@@ -660,6 +717,6 @@ jobs:
         if: steps.build_image.outputs.complete != 'true'
         shell: bash
         run: |
-          echo "LibreELEC did not finish inside the safe build window."
-          echo "The updated ccache has been saved; rerun the workflow to continue with a warmer cache."
+          echo "LibreELEC build did not complete (rc=${{ steps.build_image.outputs.rc }})."
+          echo "Detailed diagnostics and the updated ccache have been saved."
           exit 1
