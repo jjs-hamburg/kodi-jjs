@@ -968,7 +968,7 @@ inline void PAPlayer::ProcessStreams(double &freeBufferTime)
                   callback->OnPlayBackStarted(callbackFile);
                 callback->OnAVStarted(callbackFile);
               },
-              CJob::PRIORITY_NORMAL);
+              CJob::PRIORITY_DEDICATED);
 
           freeBufferTime = 1.0;
           return;
@@ -1208,7 +1208,7 @@ inline bool PAPlayer::ProcessStream(StreamInfo *si, double &freeBufferTime)
             callback->OnPlayBackStarted(callbackFile);
           callback->OnAVStarted(callbackFile);
         },
-        CJob::PRIORITY_NORMAL);
+        CJob::PRIORITY_DEDICATED);
   }
 
   if (!queueDataOk)
