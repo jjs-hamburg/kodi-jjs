@@ -156,6 +156,15 @@ void CApplicationPlayerCallback::OnPlayerCloseFile(const CFileItem& file,
     resumeBookmark.timeInSeconds = 0.0;
   }
 
+#if defined(TARGET_ANDROID)
+  // JJS: Keep seamless RAW audio handover independent from potentially slow
+  // audio database housekeeping. OnPlayBackStarted() for the successor needs
+  // this stack lock before it can queue GUI_MSG_PLAYBACK_STARTED.
+  // CSaveFileState::DoWork() does not access ApplicationStackHelper for audio.
+  if (fileItem.IsAudio() && !fileItem.IsVideo())
+    lock.unlock();
+#endif
+
   if (CServiceBroker::GetSettingsComponent()
           ->GetProfileManager()
           ->GetCurrentProfile()
