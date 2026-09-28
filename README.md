@@ -19,11 +19,11 @@ Kodi JJS otherwise stays as close as possible to standard Kodi. The project does
 
 I originally created Kodi JJS for my own personal use because the audible interruptions in TrueHD / Atmos playback bothered me enough to fix them. I am making the source code and builds available for anyone else who has the same problem and may find this fork useful.
 
-### Current Android release
+### Current release
 
-**Kodi JJS 21.3-JJS.004 – Android ARM64**
+**Kodi JJS 21.3-JJS.005 – Android ARM64 / LibreELEC Generic x86_64**
 
-[Download the current release](https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.004)
+[Download the current release](https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.005)
 
 The Android build uses its own package name, **`org.jjs.kodi`**, so it can be installed **in parallel with standard Kodi**.
 
@@ -60,6 +60,12 @@ Before installing a JJS LibreELEC TAR:
 The existing `/storage` data, including the Kodi profile, remains in place during the LibreELEC update.
 
 **Rollback:** use **Restore rollback** in the Toolbox and reboot. This restores the LibreELEC system that was installed when the rollback was created.
+
+### Known LibreELEC limitation
+
+On the tested Intel HDA/HDMI LibreELEC systems, a small number of TrueHD/MAT track boundaries can still produce a brief audio interruption.
+
+This remaining glitch is **separate from the JJS.005 GUI/state fix**. It was already present before JJS.005 and has also been reproduced outside Kodi on the same Linux/Intel HDMI audio path. Most tested TrueHD/MAT transitions remain seamless.
 
 ---
 
@@ -101,6 +107,11 @@ The JJS changes include:
   Repeated manual track changes exposed a PAPlayer race where a stale start event could make a newly created playback thread exit before the new item became active. This could produce skipped tracks or a displayed track with stale elapsed time but no audio.
 
   JJS.004 explicitly stops the previous PAPlayer worker for manual/select-item transitions, waits for outstanding queue work, closes the old streams and clears a stale `m_startEvent` before recreating the worker. The normal compatible RAW-to-RAW seamless handover remains unchanged.
+
+- **Immediate current-track / GUI state update – JJS.005**  
+  At natural audio transitions, old-track file-state housekeeping could keep the `ApplicationStackHelper` lock while the music database was updated. The successor `OnPlayBackStarted` callback needs the same lock before Kodi can queue `GUI_MSG_PLAYBACK_STARTED`, so audio could already be playing while the title and playlist marker still showed the previous track.
+
+  JJS.005 releases that lock before `CSaveFileState::DoWork()` for pure audio items. The existing asynchronous playback callbacks and the seamless RAW / TrueHD / MAT handover are unchanged.
 
 ### Android identity
 
