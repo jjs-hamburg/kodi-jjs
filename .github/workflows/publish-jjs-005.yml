@@ -78,7 +78,8 @@ jobs:
           test -f libreelec/kodi-jjs-gapless-libreelec.patch
           test -f libreelec/kodi-jjs-identity-libreelec.patch
 
-          find libreelec -maxdepth 1 -type f -name '*JJS.005*' -print -quit | grep -q .
+          find libreelec -type f -name '*JJS.005*' -print -quit | grep -q .
+          find libreelec -type f -name '*.tar' -print -quit | grep -q .
           grep -Fq 'ApplicationPlayerCallback.cpp' libreelec/kodi-jjs-gapless-libreelec.patch
           grep -Fq 'lock.unlock();' libreelec/kodi-jjs-gapless-libreelec.patch
           grep -Fq 'VERSION_TAG JJS.005' libreelec/kodi-jjs-identity-libreelec.patch
@@ -108,13 +109,20 @@ jobs:
           - On the tested Intel HDA/HDMI systems, a small number of TrueHD/MAT track boundaries can still produce a brief audio interruption. This is separate from the JJS.005 GUI/state fix and was already present before this release.
           EOF
 
+          mapfile -t RELEASE_FILES < <(
+            find android libreelec -type f \
+              \( -name '*.apk' -o -name '*.txt' -o -name '*.tar' -o -name '*.img.gz' -o -name '*.sha256' -o -name '*.patch' \) \
+              -print | sort
+          )
+          test "${#RELEASE_FILES[@]}" -gt 0
+
           if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             gh release upload "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
-              android/* libreelec/* --clobber
+              "${RELEASE_FILES[@]}" --clobber
           else
             gh release create "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
               --target "${SOURCE_COMMIT}" \
               --title "${RELEASE_TITLE}" \
               --notes-file RELEASE-NOTES.md \
-              android/* libreelec/*
+              "${RELEASE_FILES[@]}"
           fi
