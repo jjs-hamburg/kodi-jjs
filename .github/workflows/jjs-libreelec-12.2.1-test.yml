@@ -188,6 +188,21 @@ jobs:
             '   set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)' \
             > "$KODI_INCLUDE_PATCH"
 
+          # The RPi4 image pulls additional GNU toolchain/system packages that are
+          # not present in the warmed Generic build. ftp.gnu.org currently times
+          # out from GitHub Actions and LibreELEC's fallback mirror lacks several
+          # of these archives. mirrors.kernel.org carries the same GNU release
+          # archives; keep all package versions and pinned checksums unchanged.
+          while IFS= read -r -d '' f; do
+            sed -i \
+              's#https://ftp.gnu.org/gnu/#https://mirrors.kernel.org/gnu/#g' \
+              "$f"
+          done < <(grep -rlZ 'https://ftp.gnu.org/gnu/' LibreELEC.tv/packages || true)
+          if grep -R 'https://ftp.gnu.org/gnu/' LibreELEC.tv/packages; then
+            echo "Unrewritten ftp.gnu.org URL remains" >&2
+            exit 1
+          fi
+
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
 
@@ -501,6 +516,21 @@ jobs:
             ' if(POLICY CMP0069)' \
             '   set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)' \
             > "$KODI_INCLUDE_PATCH"
+
+          # The RPi4 image pulls additional GNU toolchain/system packages that are
+          # not present in the warmed Generic build. ftp.gnu.org currently times
+          # out from GitHub Actions and LibreELEC's fallback mirror lacks several
+          # of these archives. mirrors.kernel.org carries the same GNU release
+          # archives; keep all package versions and pinned checksums unchanged.
+          while IFS= read -r -d '' f; do
+            sed -i \
+              's#https://ftp.gnu.org/gnu/#https://mirrors.kernel.org/gnu/#g' \
+              "$f"
+          done < <(grep -rlZ 'https://ftp.gnu.org/gnu/' LibreELEC.tv/packages || true)
+          if grep -R 'https://ftp.gnu.org/gnu/' LibreELEC.tv/packages; then
+            echo "Unrewritten ftp.gnu.org URL remains" >&2
+            exit 1
+          fi
 
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
