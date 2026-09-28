@@ -1,0 +1,120 @@
+name: Publish Kodi JJS 21.3-JJS.005
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/publish-jjs-005.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_RUN_ID: "36350897500"
+      ANDROID_ARTIFACT_ID: "10943264396"
+      LIBREELEC_RUN_ID: "36349476679"
+      LIBREELEC_ARTIFACT_ID: "10943248150"
+      SOURCE_COMMIT: "a81f8243e78730e9ba1a885eb6544320cfa04e04"
+      RELEASE_TAG: "v21.3-JJS.005"
+      RELEASE_TITLE: "Kodi JJS 21.3-JJS.005 – Android ARM64 / LibreELEC x86_64"
+
+    steps:
+      - name: Download exact tested Android artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ANDROID_ARTIFACT_ID}/zip" \
+            > android-artifact.zip
+          mkdir android
+          unzip -q android-artifact.zip -d android
+          find android -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: Download exact tested LibreELEC artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${LIBREELEC_ARTIFACT_ID}/zip" \
+            > libreelec-artifact.zip
+          mkdir libreelec
+          unzip -q libreelec-artifact.zip -d libreelec
+          find libreelec -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: Verify exact Android release artifact
+        run: |
+          set -euo pipefail
+          cd android
+
+          test -f BUILD-INFO.txt
+          test -f SHA256SUMS.txt
+          test -f AAPT-BADGING.txt
+          test -f APKSIGNER-VERIFY.txt
+
+          APK="$(find . -maxdepth 1 -type f -name 'Kodi-JJS-21.3-JJS.005-*-arm64.apk' -print -quit)"
+          test -n "${APK}"
+
+          grep -Fq "Kodi source commit: ${SOURCE_COMMIT}" BUILD-INFO.txt
+          grep -Fq "Version: 21.3-JJS.005 (2103000)" BUILD-INFO.txt
+          grep -Fq "Android package: org.jjs.kodi" BUILD-INFO.txt
+
+          EXPECTED_SHA256="$(awk '{print $1; exit}' SHA256SUMS.txt)"
+          ACTUAL_SHA256="$(sha256sum "${APK}" | awk '{print $1}')"
+          test "${ACTUAL_SHA256}" = "${EXPECTED_SHA256}"
+
+      - name: Verify exact LibreELEC release artifact
+        run: |
+          set -euo pipefail
+
+          test -f libreelec/kodi-jjs-gapless-libreelec.patch
+          test -f libreelec/kodi-jjs-identity-libreelec.patch
+
+          find libreelec -maxdepth 1 -type f -name '*JJS.005*' -print -quit | grep -q .
+          grep -Fq 'ApplicationPlayerCallback.cpp' libreelec/kodi-jjs-gapless-libreelec.patch
+          grep -Fq 'lock.unlock();' libreelec/kodi-jjs-gapless-libreelec.patch
+          grep -Fq 'VERSION_TAG JJS.005' libreelec/kodi-jjs-identity-libreelec.patch
+
+      - name: Publish GitHub release from tested artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          cat > RELEASE-NOTES.md <<'EOF'
+          Kodi JJS 21.3-JJS.005.
+
+          This release publishes the exact artifacts from the already successful and subsequently tested Android ARM64 and LibreELEC Generic x86_64 workflows. It is not a rebuild.
+
+          JJS.005 fixes delayed current-track / GUI state changes at natural audio transitions. Audio file-state housekeeping could hold ApplicationStackHelper's lock while the music database was updated; the successor OnPlayBackStarted callback needs the same lock before it can queue GUI_MSG_PLAYBACK_STARTED. For pure audio items JJS.005 releases that lock before CSaveFileState::DoWork(). The existing asynchronous playback-callback path and seamless RAW / TrueHD / MAT handover are unchanged.
+
+          Platforms:
+          - Android ARM64 / arm64-v8a
+          - LibreELEC 12.2.1 Generic x86_64
+          - Kodi source: 21.3-Omega-jjs
+          - Kodi source commit: a81f8243e78730e9ba1a885eb6544320cfa04e04
+          - Android source workflow run: 36350897500
+          - LibreELEC source workflow run: 36349476679
+
+          Known LibreELEC limitation:
+          - On the tested Intel HDA/HDMI systems, a small number of TrueHD/MAT track boundaries can still produce a brief audio interruption. This is separate from the JJS.005 GUI/state fix and was already present before this release.
+          EOF
+
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+              android/* libreelec/* --clobber
+          else
+            gh release create "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+              --target "${SOURCE_COMMIT}" \
+              --title "${RELEASE_TITLE}" \
+              --notes-file RELEASE-NOTES.md \
+              android/* libreelec/*
+          fi
