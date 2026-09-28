@@ -1,4 +1,4 @@
-name: Build LibreELEC 12.2.1 Generic x86_64 JJS
+name: Build LibreELEC 12.2.1 RPi4 aarch64 JJS
 
 on:
   workflow_dispatch:
@@ -16,9 +16,9 @@ jobs:
       LE_REPO: https://github.com/LibreELEC/LibreELEC.tv.git
       LE_REF: 12.2.1
       LE_COMMIT: 6209f5a3b067c45fbf527286dd84ee483294b46a
-      PROJECT: Generic
-      DEVICE: Generic
-      ARCH: x86_64
+      PROJECT: RPi
+      DEVICE: RPi4
+      ARCH: aarch64
       CONCURRENCY_MAKE_LEVEL: "4"
       CONCURRENCY_LOAD: "6.0"
       CCACHE_DIR: ${{ github.workspace }}/.libreelec-ccache
@@ -31,7 +31,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .libreelec-ccache-ready
-          key: libreelec-12.2.1-generic-x86_64-ccache-ready-v1
+          key: libreelec-12.2.1-rpi4-aarch64-ccache-ready-v1
           lookup-only: true
 
       - name: Free runner disk space
@@ -199,9 +199,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: LibreELEC.tv/sources
-          key: libreelec-12.2.1-generic-x86_64-sources-v1
+          key: libreelec-12.2.1-rpi4-aarch64-sources-v1
           restore-keys: |
-            libreelec-12.2.1-generic-x86_64-sources-
+            libreelec-12.2.1-rpi4-aarch64-sources-
 
       - name: Preflight all LibreELEC source downloads
         if: steps.ccache_seed.outputs.cache-hit != 'true'
@@ -276,14 +276,14 @@ jobs:
           path: |
             .libreelec-ccache
             .libreelec-ccache-local
-          key: libreelec-12.2.1-generic-x86_64-ccache-v1-bootstrap-${{ github.run_id }}
+          key: libreelec-12.2.1-rpi4-aarch64-ccache-v1-bootstrap-${{ github.run_id }}
 
       - name: Mark compiler cache seed ready
         if: steps.ccache_seed.outputs.cache-hit != 'true'
         shell: bash
         run: |
           mkdir -p .libreelec-ccache-ready
-          printf '%s\n' "LibreELEC 12.2.1 Generic x86_64 ccache bootstrap complete" \
+          printf '%s\n' "LibreELEC 12.2.1 RPi4 aarch64 ccache bootstrap complete" \
             > .libreelec-ccache-ready/ready.txt
 
       - name: Save compiler cache seed marker
@@ -291,7 +291,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .libreelec-ccache-ready
-          key: libreelec-12.2.1-generic-x86_64-ccache-ready-v1
+          key: libreelec-12.2.1-rpi4-aarch64-ccache-ready-v1
 
   build:
     name: Build LibreELEC JJS.005
@@ -306,9 +306,9 @@ jobs:
       KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
       KODI_BASE: a3a448d26b8d560a65655dab2cd122994dc4e146
       KODI_JJS: a81f8243e78730e9ba1a885eb6544320cfa04e04
-      PROJECT: Generic
-      DEVICE: Generic
-      ARCH: x86_64
+      PROJECT: RPi
+      DEVICE: RPi4
+      ARCH: aarch64
       CONCURRENCY_MAKE_LEVEL: "4"
       CONCURRENCY_LOAD: "6.0"
       CCACHE_DIR: ${{ github.workspace }}/.libreelec-ccache
@@ -509,9 +509,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: LibreELEC.tv/sources
-          key: libreelec-12.2.1-generic-x86_64-sources-v1
+          key: libreelec-12.2.1-rpi4-aarch64-sources-v1
           restore-keys: |
-            libreelec-12.2.1-generic-x86_64-sources-
+            libreelec-12.2.1-rpi4-aarch64-sources-
 
       - name: Preflight all LibreELEC source downloads
         timeout-minutes: 45
@@ -561,10 +561,10 @@ jobs:
           path: |
             .libreelec-ccache
             .libreelec-ccache-local
-          key: libreelec-12.2.1-generic-x86_64-ccache-restore-${{ github.run_id }}
+          key: libreelec-12.2.1-rpi4-aarch64-ccache-restore-${{ github.run_id }}
           restore-keys: |
-            libreelec-12.2.1-generic-x86_64-ccache-v2-
-            libreelec-12.2.1-generic-x86_64-ccache-v1-bootstrap-
+            libreelec-12.2.1-rpi4-aarch64-ccache-v2-
+            libreelec-12.2.1-rpi4-aarch64-ccache-v1-bootstrap-
 
       - name: Generate Kodi JJS functional patch
         shell: bash
@@ -647,7 +647,7 @@ jobs:
           ./scripts/checkdeps
           df -h /
 
-      - name: Build Generic x86_64 update image
+      - name: Build RPi4 aarch64 update image
         id: build_image
         working-directory: LibreELEC.tv
         shell: bash
@@ -673,7 +673,7 @@ jobs:
           path: |
             .libreelec-ccache
             .libreelec-ccache-local
-          key: libreelec-12.2.1-generic-x86_64-ccache-v2-${{ github.run_id }}
+          key: libreelec-12.2.1-rpi4-aarch64-ccache-v2-${{ github.run_id }}
 
       - name: Show build outputs
         if: always()
@@ -717,7 +717,7 @@ jobs:
         if: steps.build_image.outputs.complete == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: LibreELEC-Generic-x86_64-12.2.1-JJS.005
+          name: LibreELEC-RPi4-aarch64-12.2.1-JJS.005
           if-no-files-found: error
           retention-days: 14
           path: |
