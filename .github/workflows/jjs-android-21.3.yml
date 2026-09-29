@@ -17,7 +17,7 @@ jobs:
     env:
       KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
       KODI_REF: fix/jjs007-splash-update-safety
-      EXPECTED_KODI_COMMIT: 2a3b880fda026e53e3dd5f6526361642a3912e4a
+      EXPECTED_KODI_COMMIT: 16214aa086ffe96b92bd2ca6b5177754028c8b50
       EXPECTED_INTERNAL_APP_NAME: Kodi
       SOURCE_DISPLAY_NAME: Kodi JJS
       SOURCE_PACKAGE: org.jjs.kodi
