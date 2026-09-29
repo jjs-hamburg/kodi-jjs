@@ -2,6 +2,9 @@ name: Build LibreELEC 12.2.1 Generic x86_64 JJS
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - build/21.3-jjs-007-libreelec
 
 permissions:
   contents: read
