@@ -74,6 +74,14 @@ jobs:
           git -C LibreELEC.tv fetch --depth=1 origin "${LE_REF}"
           git -C LibreELEC.tv checkout --detach "${LE_COMMIT}"
           test "$(git -C LibreELEC.tv rev-parse HEAD)" = "${LE_COMMIT}"
+
+          # GNU's ftpmirror currently redirects GitHub runners to ftp.gnu.org,
+          # which times out here. Use the kernel.org GNU mirror instead while
+          # keeping LibreELEC's package versions and SHA256 checks unchanged.
+          find LibreELEC.tv/packages -type f -name package.mk -print0 | xargs -0 sed -i \
+            -e 's#https://ftpmirror.gnu.org/gnu/#https://mirrors.kernel.org/gnu/#g' \
+            -e 's#https://ftpmirror.gnu.org/#https://mirrors.kernel.org/gnu/#g' \
+            -e 's#https://ftp.gnu.org/gnu/#https://mirrors.kernel.org/gnu/#g'
           grep -q 'PKG_VERSION="21.3-Omega"' LibreELEC.tv/packages/mediacenter/kodi/package.mk
 
           # Kodi JJS must not be overwritten by LibreELEC automatic updates.
@@ -396,6 +404,14 @@ jobs:
           git -C LibreELEC.tv fetch --depth=1 origin "${LE_REF}"
           git -C LibreELEC.tv checkout --detach "${LE_COMMIT}"
           test "$(git -C LibreELEC.tv rev-parse HEAD)" = "${LE_COMMIT}"
+
+          # GNU's ftpmirror currently redirects GitHub runners to ftp.gnu.org,
+          # which times out here. Use the kernel.org GNU mirror instead while
+          # keeping LibreELEC's package versions and SHA256 checks unchanged.
+          find LibreELEC.tv/packages -type f -name package.mk -print0 | xargs -0 sed -i \
+            -e 's#https://ftpmirror.gnu.org/gnu/#https://mirrors.kernel.org/gnu/#g' \
+            -e 's#https://ftpmirror.gnu.org/#https://mirrors.kernel.org/gnu/#g' \
+            -e 's#https://ftp.gnu.org/gnu/#https://mirrors.kernel.org/gnu/#g'
           grep -q 'PKG_VERSION="21.3-Omega"' LibreELEC.tv/packages/mediacenter/kodi/package.mk
 
           # Kodi JJS must not be overwritten by LibreELEC automatic updates.
