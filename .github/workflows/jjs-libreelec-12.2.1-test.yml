@@ -81,41 +81,41 @@ jobs:
           # are migrated once, then later user choices are respected.
           mkdir -p LibreELEC.tv/packages/mediacenter/LibreELEC-settings/patches
           cat > LibreELEC.tv/packages/mediacenter/LibreELEC-settings/patches/libreelec-settings-999-jjs-update-safety.patch <<'PATCH'
---- a/resources/lib/modules/updates.py
-+++ b/resources/lib/modules/updates.py
-@@ -42,7 +42,7 @@
-             'settings': {
-                 'AutoUpdate': {
-                     'name': 32014,
--                    'value': 'auto',
-+                    'value': 'manual',
-                     'action': 'set_auto_update',
-                     'type': 'multivalue',
-                     'values': ['auto', 'manual'],
-@@ -59,7 +59,7 @@
-                 },
-                 'UpdateNotify': {
-                     'name': 32365,
--                    'value': '1',
-+                    'value': '0',
-                     'action': 'set_value',
-                     'type': 'bool',
-                     'InfoText': 715,
-@@ -175,9 +175,15 @@
-     @log.log_function()
-     def start_service(self):
-             self.is_service = True
-             self.load_values()
-+            if oe.read_setting('updates', 'JJSUpdateDefaultsApplied') != '1':
-+                self.struct['update']['settings']['AutoUpdate']['value'] = 'manual'
-+                self.struct['update']['settings']['UpdateNotify']['value'] = '0'
-+                oe.write_setting('updates', 'AutoUpdate', 'manual')
-+                oe.write_setting('updates', 'UpdateNotify', '0')
-+                oe.write_setting('updates', 'JJSUpdateDefaultsApplied', '1')
-             self.set_auto_update()
-             del self.is_service
- 
-PATCH
+          --- a/resources/lib/modules/updates.py
+          +++ b/resources/lib/modules/updates.py
+          @@ -42,7 +42,7 @@
+                       'settings': {
+                           'AutoUpdate': {
+                               'name': 32014,
+          -                    'value': 'auto',
+          +                    'value': 'manual',
+                               'action': 'set_auto_update',
+                               'type': 'multivalue',
+                               'values': ['auto', 'manual'],
+          @@ -59,7 +59,7 @@
+                           },
+                           'UpdateNotify': {
+                               'name': 32365,
+          -                    'value': '1',
+          +                    'value': '0',
+                               'action': 'set_value',
+                               'type': 'bool',
+                               'InfoText': 715,
+          @@ -175,9 +175,15 @@
+               @log.log_function()
+               def start_service(self):
+                       self.is_service = True
+                       self.load_values()
+          +            if oe.read_setting('updates', 'JJSUpdateDefaultsApplied') != '1':
+          +                self.struct['update']['settings']['AutoUpdate']['value'] = 'manual'
+          +                self.struct['update']['settings']['UpdateNotify']['value'] = '0'
+          +                oe.write_setting('updates', 'AutoUpdate', 'manual')
+          +                oe.write_setting('updates', 'UpdateNotify', '0')
+          +                oe.write_setting('updates', 'JJSUpdateDefaultsApplied', '1')
+                       self.set_auto_update()
+                       del self.is_service
+           
+          PATCH
 
           # wireguard-tools v1.0.20250521 currently produces different snapshot
           # archive bytes at the official upstream URL than LibreELEC 12.2.1 pinned.
@@ -418,41 +418,41 @@ PATCH
           # are migrated once, then later user choices are respected.
           mkdir -p LibreELEC.tv/packages/mediacenter/LibreELEC-settings/patches
           cat > LibreELEC.tv/packages/mediacenter/LibreELEC-settings/patches/libreelec-settings-999-jjs-update-safety.patch <<'PATCH'
---- a/resources/lib/modules/updates.py
-+++ b/resources/lib/modules/updates.py
-@@ -42,7 +42,7 @@
-             'settings': {
-                 'AutoUpdate': {
-                     'name': 32014,
--                    'value': 'auto',
-+                    'value': 'manual',
-                     'action': 'set_auto_update',
-                     'type': 'multivalue',
-                     'values': ['auto', 'manual'],
-@@ -59,7 +59,7 @@
-                 },
-                 'UpdateNotify': {
-                     'name': 32365,
--                    'value': '1',
-+                    'value': '0',
-                     'action': 'set_value',
-                     'type': 'bool',
-                     'InfoText': 715,
-@@ -175,9 +175,15 @@
-     @log.log_function()
-     def start_service(self):
-             self.is_service = True
-             self.load_values()
-+            if oe.read_setting('updates', 'JJSUpdateDefaultsApplied') != '1':
-+                self.struct['update']['settings']['AutoUpdate']['value'] = 'manual'
-+                self.struct['update']['settings']['UpdateNotify']['value'] = '0'
-+                oe.write_setting('updates', 'AutoUpdate', 'manual')
-+                oe.write_setting('updates', 'UpdateNotify', '0')
-+                oe.write_setting('updates', 'JJSUpdateDefaultsApplied', '1')
-             self.set_auto_update()
-             del self.is_service
- 
-PATCH
+          --- a/resources/lib/modules/updates.py
+          +++ b/resources/lib/modules/updates.py
+          @@ -42,7 +42,7 @@
+                       'settings': {
+                           'AutoUpdate': {
+                               'name': 32014,
+          -                    'value': 'auto',
+          +                    'value': 'manual',
+                               'action': 'set_auto_update',
+                               'type': 'multivalue',
+                               'values': ['auto', 'manual'],
+          @@ -59,7 +59,7 @@
+                           },
+                           'UpdateNotify': {
+                               'name': 32365,
+          -                    'value': '1',
+          +                    'value': '0',
+                               'action': 'set_value',
+                               'type': 'bool',
+                               'InfoText': 715,
+          @@ -175,9 +175,15 @@
+               @log.log_function()
+               def start_service(self):
+                       self.is_service = True
+                       self.load_values()
+          +            if oe.read_setting('updates', 'JJSUpdateDefaultsApplied') != '1':
+          +                self.struct['update']['settings']['AutoUpdate']['value'] = 'manual'
+          +                self.struct['update']['settings']['UpdateNotify']['value'] = '0'
+          +                oe.write_setting('updates', 'AutoUpdate', 'manual')
+          +                oe.write_setting('updates', 'UpdateNotify', '0')
+          +                oe.write_setting('updates', 'JJSUpdateDefaultsApplied', '1')
+                       self.set_auto_update()
+                       del self.is_service
+           
+          PATCH
 
           # wireguard-tools v1.0.20250521 currently produces different snapshot
           # archive bytes at the official upstream URL than LibreELEC 12.2.1 pinned.
