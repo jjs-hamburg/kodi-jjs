@@ -1,4 +1,4 @@
-![Kodi Logo](docs/resources/banner.png)
+![Kodi JJS – Atmos gapless fixed](docs/images/kodi-jjs-splash-atmos-gapless-fixed.png)
 
 # Kodi JJS
 
