@@ -2,6 +2,9 @@ name: Build Kodi JJS 21.3 ARM64 APK
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - build/21.3-jjs-007-android
 
 permissions:
   contents: read
