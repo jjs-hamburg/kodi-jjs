@@ -21,9 +21,9 @@ I originally created Kodi JJS for my own personal use because the audible interr
 
 ### Current release
 
-**Kodi JJS 21.3-JJS.005 – Android ARM64 / LibreELEC Generic x86_64**
+**Kodi JJS 21.3-JJS.007 – Android ARM64 / LibreELEC Generic x86_64 / LibreELEC Raspberry Pi 4**
 
-[Download the current release](https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.005)
+[Download the current release](https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.007)
 
 The Android build uses its own package name, **`org.jjs.kodi`**, so it can be installed **in parallel with standard Kodi**.
 
@@ -49,6 +49,8 @@ Because Kodi JJS uses a separate Android package, the existing Kodi installation
 **Rollback:** simply start the original Kodi again. If you no longer want Kodi JJS, uninstall it.
 
 ### LibreELEC
+
+JJS.007 provides LibreELEC 12.2.1 builds for **Generic x86_64** and **Raspberry Pi 4 (aarch64)**.
 
 Before installing a JJS LibreELEC TAR:
 
@@ -112,6 +114,15 @@ The JJS changes include:
   At natural audio transitions, old-track file-state housekeeping could keep the `ApplicationStackHelper` lock while the music database was updated. The successor `OnPlayBackStarted` callback needs the same lock before Kodi can queue `GUI_MSG_PLAYBACK_STARTED`, so audio could already be playing while the title and playlist marker still showed the previous track.
 
   JJS.005 releases that lock before `CSaveFileState::DoWork()` for pure audio items. The existing asynchronous playback callbacks and the seamless RAW / TrueHD / MAT handover are unchanged.
+
+- **Music database startup guard – JJS.007**  
+  If the music database is temporarily unavailable, `GetMusicNeedsTagScan()` can return `-1`. JJS.007 no longer treats that error value as a pending tag scan, preventing the following database write from dereferencing an unavailable dataset.
+
+- **New Kodi JJS splash – JJS.007**  
+  The Android ARM64, LibreELEC Generic x86_64 and LibreELEC Raspberry Pi 4 builds use the new Kodi JJS splash screen.
+
+- **LibreELEC update safety – JJS.007**  
+  The JJS LibreELEC builds default automatic system updates to **manual** and disable update notifications so a standard LibreELEC update cannot silently replace Kodi JJS. Existing installations receive this setting once; later deliberate user changes are left untouched.
 
 ### Android identity
 
