@@ -50,7 +50,7 @@ jobs:
             > rpi4-artifact.zip
           mkdir rpi4
           unzip -q rpi4-artifact.zip -d rpi4
-          find rpi4 -maxdepth 1 -type f -printf '%f\n' | sort
+          find rpi4 -type f -printf '%P\n' | sort
 
       - name: Download exact tested Generic x86_64 artifact
         env:
@@ -63,7 +63,7 @@ jobs:
             > x64-artifact.zip
           mkdir x64
           unzip -q x64-artifact.zip -d x64
-          find x64 -maxdepth 1 -type f -printf '%f\n' | sort
+          find x64 -type f -printf '%P\n' | sort
 
       - name: Verify exact Android release artifact
         run: |
@@ -91,8 +91,8 @@ jobs:
           set -euo pipefail
           test -f rpi4/kodi-jjs-gapless-libreelec.patch
           test -f rpi4/kodi-jjs-identity-libreelec.patch
-          find rpi4 -maxdepth 1 -type f -name 'LibreELEC-RPi4.aarch64-12.2.1-JJS.007.tar' -print -quit | grep -q .
-          find rpi4 -maxdepth 1 -type f -name 'LibreELEC-RPi4.aarch64-12.2.1-JJS.007.img.gz' -print -quit | grep -q .
+          test -f rpi4/LibreELEC.tv/target/LibreELEC-RPi4.aarch64-12.2.1-JJS.007.tar
+          test -f rpi4/LibreELEC.tv/target/LibreELEC-RPi4.aarch64-12.2.1-JJS.007.img.gz
           grep -Fq 'GUIWindowMusicBase.cpp' rpi4/kodi-jjs-gapless-libreelec.patch
           grep -Fq 'media/splash.jpg' rpi4/kodi-jjs-gapless-libreelec.patch
           grep -Fq 'VERSION_TAG JJS.007' rpi4/kodi-jjs-identity-libreelec.patch
@@ -102,8 +102,8 @@ jobs:
           set -euo pipefail
           test -f x64/kodi-jjs-gapless-libreelec.patch
           test -f x64/kodi-jjs-identity-libreelec.patch
-          find x64 -maxdepth 1 -type f -name 'LibreELEC-Generic.x86_64-12.2.1-JJS.007.tar' -print -quit | grep -q .
-          find x64 -maxdepth 1 -type f -name 'LibreELEC-Generic.x86_64-12.2.1-JJS.007.img.gz' -print -quit | grep -q .
+          test -f x64/LibreELEC.tv/target/LibreELEC-Generic.x86_64-12.2.1-JJS.007.tar
+          test -f x64/LibreELEC.tv/target/LibreELEC-Generic.x86_64-12.2.1-JJS.007.img.gz
           grep -Fq 'GUIWindowMusicBase.cpp' x64/kodi-jjs-gapless-libreelec.patch
           grep -Fq 'media/splash.jpg' x64/kodi-jjs-gapless-libreelec.patch
           grep -Fq 'VERSION_TAG JJS.007' x64/kodi-jjs-identity-libreelec.patch
@@ -154,12 +154,12 @@ jobs:
           )
 
           mapfile -t RPI4_FILES < <(
-            find rpi4 -maxdepth 1 -type f \
+            find rpi4 -type f \
               \( -name '*.tar' -o -name '*.img.gz' -o -name '*.sha256' \) -print | sort
           )
 
           mapfile -t X64_FILES < <(
-            find x64 -maxdepth 1 -type f \
+            find x64 -type f \
               \( -name '*.tar' -o -name '*.img.gz' -o -name '*.sha256' \) -print | sort
           )
 
