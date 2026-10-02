@@ -561,10 +561,14 @@ namespace XBMCAddon
     {
       XBMC_TRACE;
 
-      if (dlg && open)
+      if (handle && open)
       {
         DelayedCallGuard dg;
-        dlg->Close();
+        // DialogExtendedProgressBar is shared by all background progress
+        // handles. Destroying one Python DialogProgressBG must finish only its
+        // own handle, not close the common window underneath other users.
+        handle->MarkFinished();
+        open = false;
       }
     }
 
