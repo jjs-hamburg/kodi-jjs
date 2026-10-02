@@ -2302,6 +2302,9 @@ void CMusicInfoScanner::Run()
   int count = 0;
   for (auto& it : m_pathsToScan)
   {
+    if (m_bStop)
+      break;
+
     count += CountFilesRecursively(it);
   }
   m_itemCount = count;
@@ -2310,6 +2313,9 @@ void CMusicInfoScanner::Run()
 // Recurse through all folders we scan and count files
 int CMusicInfoScanner::CountFilesRecursively(const std::string& strPath)
 {
+  if (m_bStop)
+    return 0;
+
   // load subfolder
   CFileItemList items;
   CDirectory::GetDirectory(strPath, items, CServiceBroker::GetFileExtensionProvider().GetMusicExtensions(), DIR_FLAG_NO_FILE_DIRS);
@@ -2327,6 +2333,9 @@ int CMusicInfoScanner::CountFiles(const CFileItemList &items, bool recursive)
   int count = 0;
   for (int i=0; i<items.Size(); ++i)
   {
+    if (m_bStop)
+      break;
+
     const CFileItemPtr pItem=items[i];
 
     if (recursive && pItem->m_bIsFolder)
