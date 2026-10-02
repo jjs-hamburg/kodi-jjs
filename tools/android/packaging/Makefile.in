@@ -60,15 +60,11 @@ python: | xbmc/assets
 	cd xbmc/assets/python@PYTHON_VERSION@/lib/python@PYTHON_VERSION@/; rm -rf test config config-@PYTHON_VERSION@ lib-dynload ; find . -name "*.so" -exec rm -f {} \;
 
 res:
-	mkdir -p xbmc/res xbmc/res/values images
+	mkdir -p xbmc/res xbmc/res/values images xbmc/res/drawable-nodpi
 	cp -fp $(CMAKE_SOURCE_DIR)/media/applaunch_screen.png xbmc/res/drawable/
-	cp -fp media/drawable-hdpi/ic_launcher.png xbmc/res/drawable-hdpi/ic_launcher.png
-	cp -fp media/drawable-ldpi/ic_launcher.png xbmc/res/drawable-ldpi/ic_launcher.png
-	cp -fp media/drawable-mdpi/ic_launcher.png xbmc/res/drawable-mdpi/ic_launcher.png
-	cp -fp media/drawable-xhdpi/ic_launcher.png xbmc/res/drawable-xhdpi/ic_launcher.png
-	cp -fp media/drawable-xxhdpi/ic_launcher.png xbmc/res/drawable-xxhdpi/ic_launcher.png
+	rm -f xbmc/res/drawable-*/ic_launcher.png xbmc/res/drawable-nodpi/ic_launcher.jpg
+	cp -fp media/ic_launcher_jjs.jpg xbmc/res/drawable-nodpi/ic_launcher.jpg
 	cp -fp $(CMAKE_SOURCE_DIR)/media/applaunch_screen.png xbmc/res/drawable-xxxhdpi/
-	cp -fp media/drawable-xxxhdpi/ic_launcher.png xbmc/res/drawable-xxxhdpi/ic_launcher.png
 	cp -fp media/drawable-xhdpi/banner.png xbmc/res/drawable-xhdpi/banner.png
 	cp -fp $(CMAKE_SOURCE_DIR)/media/icon80x80.png xbmc/res/drawable/ic_recommendation_80dp.png
 	cp xbmc/strings.xml xbmc/res/values/
@@ -116,6 +112,7 @@ apk-clean:
 	rm -rf xbmc/res/values
 	rm -f xbmc/res/drawable/applaunch_screen.png
 	rm -f xbmc/res/drawable-xxxhdpi/applaunch_screen.png
+	rm -f xbmc/res/drawable-*/ic_launcher.png xbmc/res/drawable-nodpi/ic_launcher.jpg
 	rm -rf assets
 
 .PHONY: force libs assets python sharedapk res package
