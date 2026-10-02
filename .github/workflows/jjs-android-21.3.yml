@@ -2,9 +2,15 @@ name: Build Kodi JJS 21.3 ARM64 APK
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/jjs-android-21.3.yml"
 
 permissions:
-  contents: read
+  contents: write
+  actions: read
 
 jobs:
   build:
@@ -14,17 +20,19 @@ jobs:
     env:
       KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
       KODI_REF: 21.3-Omega-jjs
-      EXPECTED_KODI_COMMIT: 0ee878276c2b05524ee962b9b4047e0ed52a96e4
+      EXPECTED_KODI_COMMIT: 7cbc87f98d970eac825914885eb10c4fe5dd40dc
       EXPECTED_INTERNAL_APP_NAME: Kodi
       SOURCE_DISPLAY_NAME: Kodi JJS
       SOURCE_PACKAGE: org.jjs.kodi
       EXPECTED_DISPLAY_NAME: Kodi JJS
       EXPECTED_PACKAGE: org.jjs.kodi
       EXPECTED_VERSION_CODE: "2103000"
-      EXPECTED_VERSION_NAME: "21.3-JJS.004"
-      JJS_BUILD: "004"
-      JJS_VERSION_TAG: "JJS.004"
-      JJS_ARTIFACT_NAME: Kodi-JJS-21.3-JJS.004-arm64
+      EXPECTED_VERSION_NAME: "21.3-JJS.008"
+      JJS_BUILD: "008"
+      JJS_VERSION_TAG: "JJS.008"
+      JJS_ARTIFACT_NAME: Kodi-JJS-21.3-JJS.008-arm64
+      RELEASE_TAG: v21.3-JJS.008
+      RELEASE_TITLE: Kodi JJS 21.3-JJS.008 – Android ARM64
       EXPECTED_SIGNING_CERT_SHA256: caddfcba2d9ad9b880d410a048dd19c5212e2994669f226724250439a20840c6
       ANDROID_NDK_VERSION: 21.4.7075529
       ANDROID_BUILD_TOOLS_VERSION: 33.0.1
@@ -216,11 +224,128 @@ jobs:
             | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
           test "${CERT_SHA256}" = "${EXPECTED_SIGNING_CERT_SHA256}"
 
-          unzip -Z1 "${APK}" | grep -q '^lib/arm64-v8a/libkodi.so$'
+          unzip -Z1 "${APK}" | grep -q '^lib/arm64-v8a/libkodi.so"${EXPECTED_KODI_COMMIT:0:7}"
+          APK_BASENAME="Kodi-JJS-${EXPECTED_VERSION_NAME}-${SHORT_COMMIT}-arm64.apk"
+          cp "${APK}" "artifact/${APK_BASENAME}"
+          APK_SHA256="$(sha256sum "artifact/${APK_BASENAME}" | awk '{print $1}')"
+          LIB_SHA256="$(unzip -p "artifact/${APK_BASENAME}" lib/arm64-v8a/libkodi.so | sha256sum | awk '{print $1}')"
+
+          cat > artifact/BUILD-INFO.txt <<EOF
+          Kodi repository: ${KODI_REPO}
+          Kodi source ref: ${KODI_REF}
+          Kodi source commit: ${EXPECTED_KODI_COMMIT}
+          Kodi JJS build: ${JJS_BUILD}
+          Kodi JJS version tag: ${JJS_VERSION_TAG}
+          Android display name: ${EXPECTED_DISPLAY_NAME}
+          Android package: ${EXPECTED_PACKAGE}
+          Version: ${EXPECTED_VERSION_NAME} (${EXPECTED_VERSION_CODE})
+          APK filename: ${APK_BASENAME}
+          Target: Android arm64-v8a
+          NDK: ${ANDROID_NDK_VERSION}
+          Signing certificate SHA256: ${CERT_SHA256}
+          APK SHA256: ${APK_SHA256}
+          libkodi.so SHA256: ${LIB_SHA256}
+          Wrapper commit: ${GITHUB_SHA}
+          EOF
+
+          sha256sum "artifact/${APK_BASENAME}" > artifact/SHA256SUMS.txt
+
+      - name: Upload ready-to-install Kodi JJS APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.JJS_ARTIFACT_NAME }}
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish Kodi JJS 21.3-JJS.008 release
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          cat > RELEASE-NOTES.md <<'EOF'
+          Kodi JJS 21.3-JJS.008 – Android ARM64.
+
+          This release contains the signed Android ARM64 APK built directly from the pinned Kodi JJS source commit below.
+
+          JJS.008 changes:
+          - Music library scanning: cancelling a scan now stops the file counter promptly instead of allowing the counting phase to continue.
+          - DialogProgressBG lifetime handling: destruction now finishes only the progress handle owned by that dialog instance.
+          - Android launcher icon: Kodi JJS now uses the new JJS artwork as its app icon.
+
+          The existing seamless RAW / TrueHD / Dolby Atmos handover and the earlier JJS playback-state fixes are unchanged.
+
+          Android:
+          - Target: ARM64 / arm64-v8a
+          - Package: org.jjs.kodi
+          - Version: 21.3-JJS.008
+          - Kodi source branch: 21.3-Omega-jjs
+          - Kodi source commit: 7cbc87f98d970eac825914885eb10c4fe5dd40dc
+          EOF
+
+          mapfile -t RELEASE_FILES < <(find artifact -maxdepth 1 -type f -print | sort)
+          test "${#RELEASE_FILES[@]}" -gt 0
+
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" "${RELEASE_FILES[@]}" --clobber
+            gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+              --target "${EXPECTED_KODI_COMMIT}" \
+              --title "${RELEASE_TITLE}" \
+              --notes-file RELEASE-NOTES.md
+          else
+            gh release create "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+              --target "${EXPECTED_KODI_COMMIT}" \
+              --title "${RELEASE_TITLE}" \
+              --notes-file RELEASE-NOTES.md \
+              "${RELEASE_FILES[@]}"
+          fi
+
           if unzip -Z1 "${APK}" | grep '^lib/' | grep -Ev '^lib/arm64-v8a/' >/dev/null; then
             echo "::error::Unexpected non-arm64 native libraries in APK"
             exit 1
           fi
+
+          ICON_ENTRY="$(unzip -Z1 "${APK}" | grep -E '^res/drawable-nodpi(-v[0-9]+)?/ic_launcher\.jpg"${EXPECTED_KODI_COMMIT:0:7}"
+          APK_BASENAME="Kodi-JJS-${EXPECTED_VERSION_NAME}-${SHORT_COMMIT}-arm64.apk"
+          cp "${APK}" "artifact/${APK_BASENAME}"
+          APK_SHA256="$(sha256sum "artifact/${APK_BASENAME}" | awk '{print $1}')"
+          LIB_SHA256="$(unzip -p "artifact/${APK_BASENAME}" lib/arm64-v8a/libkodi.so | sha256sum | awk '{print $1}')"
+
+          cat > artifact/BUILD-INFO.txt <<EOF
+          Kodi repository: ${KODI_REPO}
+          Kodi source ref: ${KODI_REF}
+          Kodi source commit: ${EXPECTED_KODI_COMMIT}
+          Kodi JJS build: ${JJS_BUILD}
+          Kodi JJS version tag: ${JJS_VERSION_TAG}
+          Android display name: ${EXPECTED_DISPLAY_NAME}
+          Android package: ${EXPECTED_PACKAGE}
+          Version: ${EXPECTED_VERSION_NAME} (${EXPECTED_VERSION_CODE})
+          APK filename: ${APK_BASENAME}
+          Target: Android arm64-v8a
+          NDK: ${ANDROID_NDK_VERSION}
+          Signing certificate SHA256: ${CERT_SHA256}
+          APK SHA256: ${APK_SHA256}
+          libkodi.so SHA256: ${LIB_SHA256}
+          Wrapper commit: ${GITHUB_SHA}
+          EOF
+
+          sha256sum "artifact/${APK_BASENAME}" > artifact/SHA256SUMS.txt
+
+      - name: Upload ready-to-install Kodi JJS APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.JJS_ARTIFACT_NAME }}
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 90
+ | head -1)"
+          test -n "${ICON_ENTRY}"
+          SOURCE_ICON_SHA256="$(sha256sum "${GITHUB_WORKSPACE}/kodi/tools/android/packaging/media/ic_launcher_jjs.jpg" | awk '{print $1}')"
+          APK_ICON_SHA256="$(unzip -p "${APK}" "${ICON_ENTRY}" | sha256sum | awk '{print $1}')"
+          test "${APK_ICON_SHA256}" = "${SOURCE_ICON_SHA256}"
 
           SHORT_COMMIT="${EXPECTED_KODI_COMMIT:0:7}"
           APK_BASENAME="Kodi-JJS-${EXPECTED_VERSION_NAME}-${SHORT_COMMIT}-arm64.apk"
