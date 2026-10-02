@@ -14,7 +14,9 @@ This fork was originally created for my own personal use. I am making the source
 
 Kodi itself is developed by Team Kodi and remains licensed under the GNU GPL.
 
-For technical details about the JJS changes, see [README.JJS.md](README.JJS.md).
+In addition to the gapless audio work, Kodi JJS includes a small set of targeted Kodi core stability fixes discovered during testing.
+
+For the complete list of JJS changes and fixed Kodi issues, see [README.JJS.md](README.JJS.md).
 
 
 <p align="center">
