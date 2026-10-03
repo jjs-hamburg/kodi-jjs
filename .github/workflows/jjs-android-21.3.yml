@@ -247,14 +247,26 @@ jobs:
             exit 1
           fi
 
+          echo "Launcher-related resources in APK:"
+          unzip -Z1 "${APK}" | grep -E '(^|/)ic_launcher\.(jpg|png|webp)$' || true
+
           mapfile -t ICON_ENTRIES < <(unzip -Z1 "${APK}" \
-            | grep -E '^res/drawable-(l|m|h|xh|xxh|xxxh)dpi(-v[0-9]+)?/ic_launcher\.png$' \
+            | grep -E '^res/drawable-nodpi(-v[0-9]+)?/ic_launcher\.jpg$' \
             | sort)
           if [ "${#ICON_ENTRIES[@]}" -eq 0 ]; then
-            echo "::error::No Android launcher icon resource found in APK"
+            echo "::error::JJS launcher icon resource not found in APK"
             exit 1
           fi
-          printf 'Launcher icon resources in APK:\n%s\n' "${ICON_ENTRIES[*]}"
+          printf 'JJS launcher icon resource in APK:\n%s\n' "${ICON_ENTRIES[*]}"
+
+          SOURCE_ICON_SHA256="$(sha256sum "${GITHUB_WORKSPACE}/kodi/tools/android/packaging/media/ic_launcher_jjs.jpg" | awk '{print $1}')"
+          APK_ICON_SHA256="$(unzip -p "${APK}" "${ICON_ENTRIES[0]}" | sha256sum | awk '{print $1}')"
+          if [ "${APK_ICON_SHA256}" != "${SOURCE_ICON_SHA256}" ]; then
+            echo "::error::Packaged launcher icon does not match the JJS source artwork"
+            echo "Source icon SHA256: ${SOURCE_ICON_SHA256}"
+            echo "APK icon SHA256:    ${APK_ICON_SHA256}"
+            exit 1
+          fi
 
           SHORT_COMMIT="${EXPECTED_KODI_COMMIT:0:7}"
           APK_BASENAME="Kodi-JJS-${EXPECTED_VERSION_NAME}-${SHORT_COMMIT}-arm64.apk"
