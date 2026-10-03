@@ -139,6 +139,23 @@ jobs:
             --prefix="${KODI_DEPENDS}" \
             --disable-debug
 
+      - name: Ensure valid fontconfig 2.14.0 source archive
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ARCHIVE="${KODI_TARBALLS}/fontconfig-2.14.0.tar.xz"
+          EXPECTED_SHA512="a5257249d031b3cd1a7b1521cd58f48d235a970020da4136a727db5407ec98e74a3776bc467d7e39f30ec664f56ff9fe39068317744a5e737a65109f7a005bfc"
+
+          if [ -f "${ARCHIVE}" ] && printf '%s  %s\n' "${EXPECTED_SHA512}" "${ARCHIVE}" | sha512sum -c --status; then
+            echo "Using verified cached fontconfig-2.14.0.tar.xz"
+          else
+            rm -f "${ARCHIVE}" "${ARCHIVE}.sha512"
+            curl --fail --location --retry 5 --retry-delay 3 --retry-all-errors \
+              --output "${ARCHIVE}" \
+              "https://gstreamer.freedesktop.org/src/mirror/fontconfig-2.14.0.tar.xz"
+            printf '%s  %s\n' "${EXPECTED_SHA512}" "${ARCHIVE}" | sha512sum -c -
+          fi
+
       - name: Build Kodi depends
         working-directory: kodi/tools/depends
         run: |
