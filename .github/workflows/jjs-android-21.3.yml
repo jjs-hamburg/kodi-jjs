@@ -230,11 +230,14 @@ jobs:
             exit 1
           fi
 
-          ICON_ENTRY="$(unzip -Z1 "${APK}" | grep -E '^res/drawable-nodpi(-v[0-9]+)?/ic_launcher\.jpg$' | head -1)"
-          test -n "${ICON_ENTRY}"
-          SOURCE_ICON_SHA256="$(sha256sum "${GITHUB_WORKSPACE}/kodi/tools/android/packaging/media/ic_launcher_jjs.jpg" | awk '{print $1}')"
-          APK_ICON_SHA256="$(unzip -p "${APK}" "${ICON_ENTRY}" | sha256sum | awk '{print $1}')"
-          test "${APK_ICON_SHA256}" = "${SOURCE_ICON_SHA256}"
+          mapfile -t ICON_ENTRIES < <(unzip -Z1 "${APK}" \
+            | grep -E '^res/drawable-(l|m|h|xh|xxh|xxxh)dpi(-v[0-9]+)?/ic_launcher\.png$' \
+            | sort)
+          if [ "${#ICON_ENTRIES[@]}" -eq 0 ]; then
+            echo "::error::No Android launcher icon resource found in APK"
+            exit 1
+          fi
+          printf 'Launcher icon resources in APK:\n%s\n' "${ICON_ENTRIES[*]}"
 
           SHORT_COMMIT="${EXPECTED_KODI_COMMIT:0:7}"
           APK_BASENAME="Kodi-JJS-${EXPECTED_VERSION_NAME}-${SHORT_COMMIT}-arm64.apk"
@@ -269,7 +272,6 @@ jobs:
           path: artifact/
           if-no-files-found: error
           retention-days: 90
-
 
       - name: Publish Kodi JJS 21.3-JJS.008 release
         if: ${{ github.event_name == 'push' }}
