@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - build/test-jjs008-icon-density
+      - build/21.3-jjs-008-android
 
 permissions:
   contents: read
@@ -16,8 +16,8 @@ jobs:
 
     env:
       KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
-      KODI_REF: test/jjs008-android-icon-density
-      EXPECTED_KODI_COMMIT: 07718a62b5bad9ee7d23614daab7264ff7c75f26
+      KODI_REF: fix/jjs008-progress-lifecycle
+      EXPECTED_KODI_COMMIT: ab07a745fe9a051452004740ba481fa89fc292ac
       EXPECTED_INTERNAL_APP_NAME: Kodi
       SOURCE_DISPLAY_NAME: Kodi JJS
       SOURCE_PACKAGE: org.jjs.kodi
