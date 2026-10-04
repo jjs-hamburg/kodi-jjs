@@ -17,7 +17,7 @@ jobs:
     env:
       KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
       KODI_REF: test/jjs008-android-tv-banner
-      EXPECTED_KODI_COMMIT: 355672174fb9295d7d1e33284b3dca299dd1afef
+      EXPECTED_KODI_COMMIT: a74f2c0913fc0013f6f42080ae2e3aa03fd25ca7
       EXPECTED_INTERNAL_APP_NAME: Kodi
       SOURCE_DISPLAY_NAME: Kodi JJS
       SOURCE_PACKAGE: org.jjs.kodi
