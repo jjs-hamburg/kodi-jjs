@@ -457,7 +457,7 @@ jobs:
 
           # wireguard-tools v1.0.20250521 currently produces different snapshot
           # archive bytes at the official upstream URL than LibreELEC 12.2.1 pinned.
-          # Keep package version and URL unchanged; update only the expected hash.
+          # Keep package version and URL unchanged; update only expected hash.
           WG_PKG="LibreELEC.tv/packages/network/wireguard-tools/package.mk"
           WG_OLD_SHA="6afe492647c3b0b2f68ab6df524e9e4290d03c34c3027e069e5bbc486949960e"
           WG_NEW_SHA="e1b54c682c9734e81f8bd030eb00f2b33d3f09dfbd8397766d266c299c37e3fb"
@@ -682,6 +682,8 @@ jobs:
             xbmc/application/ApplicationPlayer.cpp \
             xbmc/application/ApplicationPlayerCallback.cpp \
             xbmc/music/windows/GUIWindowMusicBase.cpp \
+            xbmc/music/infoscanner/MusicInfoScanner.cpp \
+            xbmc/interfaces/legacy/Dialog.cpp \
             media/splash.jpg \
             xbmc/cores/AudioEngine/Engines/ActiveAE/ActiveAESink.cpp \
             xbmc/cores/AudioEngine/Sinks/AESinkALSA.cpp \
@@ -723,6 +725,8 @@ jobs:
             xbmc/application/ApplicationPlayer.cpp \
             xbmc/application/ApplicationPlayerCallback.cpp \
             xbmc/music/windows/GUIWindowMusicBase.cpp \
+            xbmc/music/infoscanner/MusicInfoScanner.cpp \
+            xbmc/interfaces/legacy/Dialog.cpp \
             media/splash.jpg \
             xbmc/cores/AudioEngine/Utils/PackerMAT.cpp \
             xbmc/cores/AudioEngine/Utils/PackerMAT.h \
