@@ -96,8 +96,9 @@ jobs:
           - LibreELEC 12.2.1 Generic x86_64
 
           Raspberry Pi 4 / aarch64:
-          - The Pi4 build will be added to this release after final verification.
-          - The older Pi4 artifact is deliberately not published because it does not contain the two final JJS.008 progress fixes.
+          - The Pi4 build itself is working and has been tested successfully.
+          - The currently tested Pi4 image predates the two final JJS.008 progress fixes, so that older artifact is not attached to this release.
+          - A refreshed Pi4 release artifact containing those two fixes will be added here after the new build completes.
 
           JJS.008 changes:
           - Music-library scan cancellation now stops the parallel MusicFileCounter promptly.
