@@ -1,0 +1,207 @@
+name: Publish Kodi JJS 21.3-JJS.008
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/publish-jjs-008.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_RUN_ID: "37233456787"
+      ANDROID_ARTIFACT_ID: "11315820229"
+      RPI4_RUN_ID: "37030906686"
+      RPI4_ARTIFACT_ID: "11246693067"
+      X64_RUN_ID: "37030901005"
+      X64_ARTIFACT_ID: "11257937358"
+      ANDROID_SOURCE_COMMIT: "552c6714e0078ea394ab3cc869ab1d0f4f8f70b4"
+      CORE_SOURCE_COMMIT: "ab07a745fe9a051452004740ba481fa89fc292ac"
+      RELEASE_TAG: "v21.3-JJS.008"
+      RELEASE_TITLE: "Kodi JJS 21.3-JJS.008 – Android ARM64 / LibreELEC x86_64 / Raspberry Pi 4"
+
+    steps:
+      - name: Download exact tested Android artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ANDROID_ARTIFACT_ID}/zip" \
+            > android-artifact.zip
+          mkdir android
+          unzip -q android-artifact.zip -d android
+          find android -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: Download exact tested Raspberry Pi 4 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${RPI4_ARTIFACT_ID}/zip" \
+            > rpi4-artifact.zip
+          mkdir rpi4
+          unzip -q rpi4-artifact.zip -d rpi4
+          find rpi4 -type f -printf '%P\n' | sort
+
+      - name: Download exact tested Generic x86_64 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${X64_ARTIFACT_ID}/zip" \
+            > x64-artifact.zip
+          mkdir x64
+          unzip -q x64-artifact.zip -d x64
+          find x64 -type f -printf '%P\n' | sort
+
+      - name: Verify exact Android release artifact
+        run: |
+          set -euo pipefail
+          cd android
+
+          test -f BUILD-INFO.txt
+          test -f SHA256SUMS.txt
+          test -f AAPT-BADGING.txt
+          test -f APKSIGNER-VERIFY.txt
+
+          APK="$(find . -maxdepth 1 -type f -name 'Kodi-JJS-21.3-JJS.008-*-arm64.apk' -print -quit)"
+          test -n "${APK}"
+
+          grep -Fq "Kodi source commit: ${ANDROID_SOURCE_COMMIT}" BUILD-INFO.txt
+          grep -Fq "Version: 21.3-JJS.008 (2103000)" BUILD-INFO.txt
+          grep -Fq "Android display name: Kodi JJS" BUILD-INFO.txt
+          grep -Fq "Android package: org.jjs.kodi" BUILD-INFO.txt
+
+          EXPECTED_SHA256="$(awk '{print $1; exit}' SHA256SUMS.txt)"
+          ACTUAL_SHA256="$(sha256sum "${APK}" | awk '{print $1}')"
+          test "${ACTUAL_SHA256}" = "${EXPECTED_SHA256}"
+
+      - name: Verify exact LibreELEC Raspberry Pi 4 release artifact
+        run: |
+          set -euo pipefail
+          test -f rpi4/kodi-jjs-gapless-libreelec.patch
+          test -f rpi4/kodi-jjs-identity-libreelec.patch
+
+          RPI_TAR="$(find rpi4 -type f -name 'LibreELEC-RPi4.aarch64-12.2.1-JJS.008.tar' -print -quit)"
+          RPI_IMG="$(find rpi4 -type f -name 'LibreELEC-RPi4.aarch64-12.2.1-JJS.008.img.gz' -print -quit)"
+          test -n "${RPI_TAR}"
+          test -n "${RPI_IMG}"
+
+          grep -Fq 'GUIWindowMusicBase.cpp' rpi4/kodi-jjs-gapless-libreelec.patch
+          grep -Fq 'MusicInfoScanner.cpp' rpi4/kodi-jjs-gapless-libreelec.patch
+          grep -Fq 'xbmc/interfaces/legacy/Dialog.cpp' rpi4/kodi-jjs-gapless-libreelec.patch
+          grep -Fq 'media/splash.jpg' rpi4/kodi-jjs-gapless-libreelec.patch
+          grep -Fq 'VERSION_TAG JJS.008' rpi4/kodi-jjs-identity-libreelec.patch
+
+      - name: Verify exact LibreELEC Generic x86_64 release artifact
+        run: |
+          set -euo pipefail
+          test -f x64/kodi-jjs-gapless-libreelec.patch
+          test -f x64/kodi-jjs-identity-libreelec.patch
+
+          X64_TAR="$(find x64 -type f -name 'LibreELEC-Generic.x86_64-12.2.1-JJS.008.tar' -print -quit)"
+          X64_IMG="$(find x64 -type f -name 'LibreELEC-Generic.x86_64-12.2.1-JJS.008.img.gz' -print -quit)"
+          test -n "${X64_TAR}"
+          test -n "${X64_IMG}"
+
+          grep -Fq 'GUIWindowMusicBase.cpp' x64/kodi-jjs-gapless-libreelec.patch
+          grep -Fq 'MusicInfoScanner.cpp' x64/kodi-jjs-gapless-libreelec.patch
+          grep -Fq 'xbmc/interfaces/legacy/Dialog.cpp' x64/kodi-jjs-gapless-libreelec.patch
+          grep -Fq 'media/splash.jpg' x64/kodi-jjs-gapless-libreelec.patch
+          grep -Fq 'VERSION_TAG JJS.008' x64/kodi-jjs-identity-libreelec.patch
+
+      - name: Publish GitHub release from tested artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          cat > RELEASE-NOTES.md <<'EOF'
+          Kodi JJS 21.3-JJS.008.
+
+          This release publishes the exact artifacts from the already successful and subsequently tested Android ARM64, LibreELEC Raspberry Pi 4 and LibreELEC Generic x86_64 workflows. It is not a rebuild.
+
+          Confirmed platforms:
+          - Android ARM64 / arm64-v8a (tested on NVIDIA Shield)
+          - LibreELEC 12.2.1 Raspberry Pi 4 / aarch64
+          - LibreELEC 12.2.1 Generic x86_64
+
+          JJS.008 changes:
+          - Music-library scan cancellation: the parallel file counter now checks the stop flag before new directory reads and inside its counting loops, so cancellation can unwind promptly instead of leaving the progress operation waiting for the counter thread.
+          - Python DialogProgressBG ownership: destroying one background-progress object now finishes only its own handle instead of closing the shared extended-progress window underneath unrelated active operations.
+          - Android TV / NVIDIA Shield identity: the tested Android build uses the Kodi JJS artwork for the launcher presentation while retaining the separate Kodi JJS application name and org.jjs.kodi package.
+
+          Further Kodi fixes retained in this release:
+          - JJS.004 manual Next / Previous and PAPlayer restart lifecycle fixes.
+          - JJS.005 immediate current-track / GUI state update fix.
+          - JJS.006 music tag-rescan guard after a music-database open failure.
+          - JJS.007 Kodi JJS splash screen and LibreELEC update-safety defaults.
+
+          The existing seamless RAW / TrueHD / Dolby Atmos handover, MAT state preservation and RAW EOF backlog handling are unchanged.
+
+          Android:
+          - Source workflow run: 37233456787
+          - Kodi source commit: 552c6714e0078ea394ab3cc869ab1d0f4f8f70b4
+          - Package: org.jjs.kodi
+
+          LibreELEC Raspberry Pi 4:
+          - Source workflow run: 37030906686
+          - Kodi core source commit: ab07a745fe9a051452004740ba481fa89fc292ac
+
+          LibreELEC Generic x86_64:
+          - Source workflow run: 37030901005
+          - Kodi core source commit: ab07a745fe9a051452004740ba481fa89fc292ac
+
+          Known LibreELEC limitation:
+          - On the tested Intel HDA/HDMI systems, a small number of TrueHD/MAT track boundaries can still produce a brief audio interruption. This is separate from the Kodi JJS gapless and playback-state fixes and has also been reproduced outside Kodi on the same Linux/Intel HDMI audio path.
+          EOF
+
+          mapfile -t ANDROID_FILES < <(
+            find android -maxdepth 1 -type f \
+              \( -name '*.apk' -o -name '*.txt' \) -print | sort
+          )
+
+          mapfile -t RPI4_FILES < <(
+            find rpi4 -type f \
+              \( -name '*.tar' -o -name '*.img.gz' -o -name '*.sha256' \) -print | sort
+          )
+
+          mapfile -t X64_FILES < <(
+            find x64 -type f \
+              \( -name '*.tar' -o -name '*.img.gz' -o -name '*.sha256' \) -print | sort
+          )
+
+          RELEASE_FILES=(
+            "${ANDROID_FILES[@]}"
+            "${RPI4_FILES[@]}"
+            "${X64_FILES[@]}"
+            x64/kodi-jjs-gapless-libreelec.patch
+            x64/kodi-jjs-identity-libreelec.patch
+          )
+
+          test "${#ANDROID_FILES[@]}" -gt 0
+          test "${#RPI4_FILES[@]}" -gt 0
+          test "${#X64_FILES[@]}" -gt 0
+
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+              "${RELEASE_FILES[@]}" --clobber
+          else
+            gh release create "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+              --target "${ANDROID_SOURCE_COMMIT}" \
+              --title "${RELEASE_TITLE}" \
+              --notes-file RELEASE-NOTES.md \
+              "${RELEASE_FILES[@]}"
+          fi
