@@ -85,12 +85,6 @@ The existing `/storage` data, including the Kodi profile, remains in place durin
 
 **Rollback:** use **Restore rollback** in the Toolbox and reboot. This restores the LibreELEC system that was installed when the rollback was created.
 
-### Known LibreELEC limitation
-
-On the tested Intel HDA/HDMI LibreELEC systems, a small number of TrueHD/MAT track boundaries can still produce a brief audio interruption.
-
-This remaining glitch is **separate from the Kodi JJS gapless and playback-state fixes**. It was already present before JJS.005 and has also been reproduced outside Kodi on the same Linux/Intel HDMI audio path. Most tested TrueHD/MAT transitions remain seamless.
-
 ---
 
 ## 3. What is changed?
