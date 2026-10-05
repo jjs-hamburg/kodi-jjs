@@ -1,0 +1,140 @@
+name: Publish available Kodi JJS 21.3-JJS.008 builds now
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/publish-jjs-008-public-now.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_ARTIFACT_ID: "11315820229"
+      ANDROID_SOURCE_COMMIT: "552c6714e0078ea394ab3cc869ab1d0f4f8f70b4"
+      X64_ARTIFACT_ID: "11336635016"
+      X64_HEAD_SHA: "ef0a9cd432946a766fdbefb9bd916ca9d6a71cb0"
+      RELEASE_TAG: "v21.3-JJS.008"
+      RELEASE_TITLE: "Kodi JJS 21.3-JJS.008 – Android ARM64 / LibreELEC x86_64 (Pi4 pending)"
+
+    steps:
+      - name: Verify exact x86_64 build run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN_ID="37283818394"
+          test "$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq '.status')" = "completed"
+          test "$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq '.conclusion')" = "success"
+          test "$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq '.head_sha')" = "${X64_HEAD_SHA}"
+
+      - name: Download exact tested Android artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ANDROID_ARTIFACT_ID}/zip" > android-artifact.zip
+          mkdir android
+          unzip -q android-artifact.zip -d android
+
+      - name: Download exact green LibreELEC x86_64 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${X64_ARTIFACT_ID}/zip" > x64-artifact.zip
+          mkdir x64
+          unzip -q x64-artifact.zip -d x64
+
+      - name: Verify release files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f android/BUILD-INFO.txt
+          test -f android/SHA256SUMS.txt
+          test -f android/AAPT-BADGING.txt
+          test -f android/APKSIGNER-VERIFY.txt
+          APK="$(find android -maxdepth 1 -type f -name 'Kodi-JJS-21.3-JJS.008-*-arm64.apk' -print -quit)"
+          test -n "$APK"
+          grep -Fq "Kodi source commit: ${ANDROID_SOURCE_COMMIT}" android/BUILD-INFO.txt
+          grep -Fq "Version: 21.3-JJS.008 (2103000)" android/BUILD-INFO.txt
+          grep -Fq "Android display name: Kodi JJS" android/BUILD-INFO.txt
+          grep -Fq "Android package: org.jjs.kodi" android/BUILD-INFO.txt
+          EXPECTED_SHA256="$(awk '{print $1; exit}' android/SHA256SUMS.txt)"
+          ACTUAL_SHA256="$(sha256sum "$APK" | awk '{print $1}')"
+          test "$ACTUAL_SHA256" = "$EXPECTED_SHA256"
+
+          test -f x64/kodi-jjs-gapless-libreelec.patch
+          test -f x64/kodi-jjs-identity-libreelec.patch
+          test -n "$(find x64 -type f -name 'LibreELEC-Generic.x86_64-12.2.1-JJS.008.tar' -print -quit)"
+          test -n "$(find x64 -type f -name 'LibreELEC-Generic.x86_64-12.2.1-JJS.008.img.gz' -print -quit)"
+          grep -Fq 'xbmc/music/infoscanner/MusicInfoScanner.cpp' x64/kodi-jjs-gapless-libreelec.patch
+          grep -Fq 'xbmc/interfaces/legacy/Dialog.cpp' x64/kodi-jjs-gapless-libreelec.patch
+          grep -Fq 'VERSION_TAG JJS.008' x64/kodi-jjs-identity-libreelec.patch
+
+      - name: Publish public JJS.008 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > RELEASE-NOTES.md <<'EOF'
+          Kodi JJS 21.3-JJS.008.
+
+          Public builds currently available:
+          - Android ARM64 / arm64-v8a (tested on NVIDIA Shield)
+          - LibreELEC 12.2.1 Generic x86_64
+
+          Raspberry Pi 4 / aarch64:
+          - The corrected JJS.008 Pi4 build is still being generated.
+          - It will be attached to this same public release after the exact build finishes successfully and passes the release verification.
+          - The older Pi4 artifact is deliberately not being published because it does not contain the two final JJS.008 progress fixes.
+
+          JJS.008 changes:
+          - Music-library scan cancellation now stops the parallel MusicFileCounter promptly.
+          - Python DialogProgressBG destruction now finishes only its own handle instead of closing unrelated shared progress displays.
+          - Android TV / NVIDIA Shield uses the Kodi JJS launcher artwork while retaining the Kodi JJS application name and org.jjs.kodi package.
+
+          Further Kodi fixes retained in this release:
+          - JJS.004 manual Next / Previous transition-race and PAPlayer stale-start-event fixes.
+          - JJS.005 immediate playback callback / GUI state update fix.
+          - JJS.006 music tag-rescan guard after music-database open failure.
+          - JJS.007 Kodi JJS splash screen and LibreELEC update-safety defaults.
+
+          The seamless RAW / TrueHD / Dolby Atmos handover, MAT state preservation, RAW EOF backlog handling and chapter/end-offset correction are retained unchanged.
+          EOF
+
+          mapfile -t ANDROID_FILES < <(find android -maxdepth 1 -type f \( -name '*.apk' -o -name '*.txt' \) -print | sort)
+          mapfile -t X64_FILES < <(find x64 -type f \( -name '*.tar' -o -name '*.img.gz' -o -name '*.sha256' \) -print | sort)
+
+          RELEASE_FILES=(
+            "${ANDROID_FILES[@]}"
+            "${X64_FILES[@]}"
+            x64/kodi-jjs-gapless-libreelec.patch
+            x64/kodi-jjs-identity-libreelec.patch
+          )
+
+          test "${#ANDROID_FILES[@]}" -gt 0
+          test "${#X64_FILES[@]}" -gt 0
+
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" "${RELEASE_FILES[@]}" --clobber
+            gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+              --title "${RELEASE_TITLE}" --notes-file RELEASE-NOTES.md --draft=false --prerelease=false
+          else
+            gh release create "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+              --target "${ANDROID_SOURCE_COMMIT}" \
+              --title "${RELEASE_TITLE}" \
+              --notes-file RELEASE-NOTES.md \
+              "${RELEASE_FILES[@]}"
+          fi
