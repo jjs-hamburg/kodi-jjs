@@ -1,0 +1,61 @@
+name: Repair JJS.008 LibreELEC patch file lists
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/repair-jjs008-le-workflows.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add missing JJS.008 source files to both LibreELEC workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          update_branch() {
+            BRANCH="$1"
+            FILE='.github/workflows/jjs-libreelec-12.2.1-test.yml'
+            API="/repos/${GITHUB_REPOSITORY}/contents/${FILE}?ref=${BRANCH}"
+
+            META="$(gh api -H 'Accept: application/vnd.github+json' "$API")"
+            SHA="$(printf '%s' "$META" | jq -r '.sha')"
+            printf '%s' "$META" | jq -r '.content' | tr -d '\n' | base64 -d > workflow.yml
+
+            python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('workflow.yml')
+          text = path.read_text(encoding='utf-8')
+          needle = "            xbmc/music/windows/GUIWindowMusicBase.cpp \\\n            media/splash.jpg \\\n"
+          replacement = "            xbmc/music/windows/GUIWindowMusicBase.cpp \\\n            xbmc/music/infoscanner/MusicInfoScanner.cpp \\\n            xbmc/interfaces/legacy/Dialog.cpp \\\n            media/splash.jpg \\\n"
+          count = text.count(needle)
+          if count != 2:
+              raise SystemExit(f'Expected exactly 2 patch-list locations, found {count}')
+          path.write_text(text.replace(needle, replacement), encoding='utf-8')
+          PY
+
+            grep -n -A4 'xbmc/music/windows/GUIWindowMusicBase.cpp' workflow.yml
+            test "$(grep -c 'xbmc/music/infoscanner/MusicInfoScanner.cpp' workflow.yml)" -eq 2
+            test "$(grep -c 'xbmc/interfaces/legacy/Dialog.cpp' workflow.yml)" -eq 2
+
+            ENCODED="$(base64 -w0 workflow.yml)"
+            gh api --method PUT \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/${GITHUB_REPOSITORY}/contents/${FILE}" \
+              -f message='Include JJS.008 progress fixes in LibreELEC patch' \
+              -f content="$ENCODED" \
+              -f sha="$SHA" \
+              -f branch="$BRANCH" >/dev/null
+          }
+
+          update_branch 'build/21.3-jjs-008-libreelec'
+          update_branch 'build/21.3-jjs-008-rpi4'
