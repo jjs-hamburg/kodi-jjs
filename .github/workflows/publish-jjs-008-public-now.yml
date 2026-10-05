@@ -20,7 +20,7 @@ jobs:
       X64_ARTIFACT_ID: "11336635016"
       X64_HEAD_SHA: "ef0a9cd432946a766fdbefb9bd916ca9d6a71cb0"
       RELEASE_TAG: "v21.3-JJS.008"
-      RELEASE_TITLE: "Kodi JJS 21.3-JJS.008 – Android ARM64 / LibreELEC x86_64 (Pi4 pending)"
+      RELEASE_TITLE: "Kodi JJS 21.3-JJS.008 – Android ARM64 / LibreELEC x86_64"
 
     steps:
       - name: Verify exact x86_64 build run
@@ -96,9 +96,8 @@ jobs:
           - LibreELEC 12.2.1 Generic x86_64
 
           Raspberry Pi 4 / aarch64:
-          - The corrected JJS.008 Pi4 build is still being generated.
-          - It will be attached to this same public release after the exact build finishes successfully and passes the release verification.
-          - The older Pi4 artifact is deliberately not being published because it does not contain the two final JJS.008 progress fixes.
+          - The Pi4 build will be added to this release after final verification.
+          - The older Pi4 artifact is deliberately not published because it does not contain the two final JJS.008 progress fixes.
 
           JJS.008 changes:
           - Music-library scan cancellation now stops the parallel MusicFileCounter promptly.
