@@ -19,11 +19,33 @@ Kodi JJS otherwise stays as close as possible to standard Kodi. The project does
 
 I originally created Kodi JJS for my own personal use because the audible interruptions in TrueHD / Atmos playback bothered me enough to fix them. I am making the source code and builds available for anyone else who has the same problem and may find this fork useful.
 
+### Further Kodi Fixes
+
+In addition to the gapless RAW / TrueHD / Atmos work, Kodi JJS carries a small set of independent Kodi core fixes found while using and testing the fork:
+
+- **Manual Next / Previous and incompatible-format transition races – JJS.004**  
+  Manual track changes could overlap asynchronous preparation with PAPlayer shutdown and leave stale or orphaned AudioEngine streams behind. Kodi JJS waits for outstanding queue work, closes the previous streams in a defined order and uses Kodi's normal reopen path when the actual output format changes.
+
+- **PAPlayer restart with a stale start event – JJS.004**  
+  A completed PAPlayer thread could leave its start event signaled. A following manual transition could then make the newly created playback thread exit before the new item became active. Kodi JJS clears that stale event before restarting the worker.
+
+- **Playback callback blocked by audio file-state housekeeping – JJS.005**  
+  Saving the outgoing audio file state could keep the application stack lock while database housekeeping ran. The successor playback callback needs the same lock, so audio could already be playing while the title and playlist marker still showed the previous track. Kodi JJS releases the lock before that audio-only housekeeping work.
+
+- **False music tag-rescan path after database open failure – JJS.006**  
+  `GetMusicNeedsTagScan()` can return a negative error value when the music database could not be opened. Stock Kodi treated every non-zero result as "tag scan required". Kodi JJS enters the rescan path only when the returned value is actually positive.
+
+- **Cancelling a music-library update can leave the file counter alive – JJS.008**  
+  The parallel `MusicFileCounter` used for percentage calculation checked the stop flag too late during recursive counting. Cancelling a large library scan could therefore leave the operation waiting for the counter to unwind. Kodi JJS checks the stop flag before new directory reads and inside the counting loops so cancellation returns promptly.
+
+- **Destroyed Python `DialogProgressBG` can close unrelated progress displays – JJS.008**  
+  Kodi's extended progress window is shared by multiple background-progress handles. Destroying one Python `DialogProgressBG` object closed that shared window instead of finishing only its own handle. Kodi JJS now marks only the owning handle finished, leaving other progress operations visible.
+
 ### Current release
 
-**Kodi JJS 21.3-JJS.007 – Android ARM64 / LibreELEC Generic x86_64 / LibreELEC Raspberry Pi 4**
+**Kodi JJS 21.3-JJS.008 – Android ARM64 / LibreELEC Generic x86_64 / LibreELEC Raspberry Pi 4**
 
-[Download the current release](https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.007)
+[Download the current release](https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.008)
 
 The Android build uses its own package name, **`org.jjs.kodi`**, so it can be installed **in parallel with standard Kodi**.
 
@@ -50,7 +72,7 @@ Because Kodi JJS uses a separate Android package, the existing Kodi installation
 
 ### LibreELEC
 
-JJS.007 provides LibreELEC 12.2.1 builds for **Generic x86_64** and **Raspberry Pi 4 (aarch64)**.
+JJS.008 provides LibreELEC 12.2.1 builds for **Generic x86_64** and **Raspberry Pi 4 (aarch64)**.
 
 Before installing a JJS LibreELEC TAR:
 
@@ -91,7 +113,7 @@ Kodi JJS changes the PAPlayer / AudioEngine transition so that a compatible succ
 
 The normal Kodi drain/reopen path is still used when the actual RAW output format is not compatible.
 
-The JJS changes include:
+The gapless/audio changes include:
 
 - **Seamless RAW handover in PAPlayer**  
   The next compatible RAW decoder is prepared before the current track ends. At the boundary, the existing AudioEngine stream is transferred to the successor instead of being unnecessarily recreated.
@@ -105,21 +127,10 @@ The JJS changes include:
 - **Chapter / end-offset fix**  
   The upstream correction for chaptered audio ending too early is included.
 
-- **Manual PAPlayer transition lifecycle fix – JJS.004**  
-  Repeated manual track changes exposed a PAPlayer race where a stale start event could make a newly created playback thread exit before the new item became active. This could produce skipped tracks or a displayed track with stale elapsed time but no audio.
-
-  JJS.004 explicitly stops the previous PAPlayer worker for manual/select-item transitions, waits for outstanding queue work, closes the old streams and clears a stale `m_startEvent` before recreating the worker. The normal compatible RAW-to-RAW seamless handover remains unchanged.
-
-- **Immediate current-track / GUI state update – JJS.005**  
-  At natural audio transitions, old-track file-state housekeeping could keep the `ApplicationStackHelper` lock while the music database was updated. The successor `OnPlayBackStarted` callback needs the same lock before Kodi can queue `GUI_MSG_PLAYBACK_STARTED`, so audio could already be playing while the title and playlist marker still showed the previous track.
-
-  JJS.005 releases that lock before `CSaveFileState::DoWork()` for pure audio items. The existing asynchronous playback callbacks and the seamless RAW / TrueHD / MAT handover are unchanged.
-
-- **Music database startup guard – JJS.007**  
-  If the music database is temporarily unavailable, `GetMusicNeedsTagScan()` can return `-1`. JJS.007 no longer treats that error value as a pending tag scan, preventing the following database write from dereferencing an unavailable dataset.
+Additional release integration changes:
 
 - **New Kodi JJS splash – JJS.007**  
-  The Android ARM64, LibreELEC Generic x86_64 and LibreELEC Raspberry Pi 4 builds use the new Kodi JJS splash screen.
+  The Android ARM64, LibreELEC Generic x86_64 and LibreELEC Raspberry Pi 4 builds use the Kodi JJS splash screen.
 
 - **LibreELEC update safety – JJS.007**  
   The JJS LibreELEC builds default automatic system updates to **manual** and disable update notifications so a standard LibreELEC update cannot silently replace Kodi JJS. Existing installations receive this setting once; later deliberate user changes are left untouched.
@@ -130,6 +141,7 @@ Android builds use:
 
 - App name: **Kodi JJS**
 - Package: **`org.jjs.kodi`**
+- Kodi JJS artwork for the Android TV / NVIDIA Shield launcher presentation
 
 This is what allows Kodi JJS and official Kodi (`org.xbmc.kodi`) to coexist on the same Android device.
 
