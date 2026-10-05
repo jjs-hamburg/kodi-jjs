@@ -696,6 +696,8 @@ jobs:
             xbmc/application/ApplicationPlayer.cpp \
             xbmc/application/ApplicationPlayerCallback.cpp \
             xbmc/music/windows/GUIWindowMusicBase.cpp \
+            xbmc/music/infoscanner/MusicInfoScanner.cpp \
+            xbmc/interfaces/legacy/Dialog.cpp \
             media/splash.jpg \
             xbmc/cores/AudioEngine/Engines/ActiveAE/ActiveAESink.cpp \
             xbmc/cores/AudioEngine/Sinks/AESinkALSA.cpp \
@@ -737,6 +739,8 @@ jobs:
             xbmc/application/ApplicationPlayer.cpp \
             xbmc/application/ApplicationPlayerCallback.cpp \
             xbmc/music/windows/GUIWindowMusicBase.cpp \
+            xbmc/music/infoscanner/MusicInfoScanner.cpp \
+            xbmc/interfaces/legacy/Dialog.cpp \
             media/splash.jpg \
             xbmc/cores/AudioEngine/Utils/PackerMAT.cpp \
             xbmc/cores/AudioEngine/Utils/PackerMAT.h \
