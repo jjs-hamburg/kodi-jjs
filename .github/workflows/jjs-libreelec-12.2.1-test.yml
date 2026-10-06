@@ -195,6 +195,21 @@ jobs:
           sed -i "s/^PKG_SHA256=.*/PKG_SHA256=\"$udevil_sha\"/" \
             LibreELEC.tv/packages/sysutils/udevil/package.mk
 
+          # JJS_SOURCE_MIRROR_FIX_V1: GitHub runners currently cannot reliably
+          # reach ftp.gnu.org or Savannah. Use mirrors carrying the identical
+          # release archives; LibreELEC's pinned SHA256 values remain authoritative.
+          find LibreELEC.tv/packages -type f -name package.mk -print0 | xargs -0 sed -i \
+            -e 's#https://ftp.gnu.org/pub/gnu/#https://mirrors.kernel.org/gnu/#g' \
+            -e 's#https://ftp.gnu.org/gnu/#https://mirrors.kernel.org/gnu/#g'
+
+          sed -i \
+            's#http://download.savannah.nongnu.org/releases/attr/${PKG_NAME}-${PKG_VERSION}.tar.gz#https://mirror.fi.ossplanet.net/nongnu/attr/${PKG_NAME}-${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/devel/attr/package.mk
+
+          sed -i \
+            's#https://download.savannah.gnu.org/releases/freetype/freetype-${PKG_VERSION}.tar.xz#https://downloads.sourceforge.net/project/freetype/freetype2/${PKG_VERSION}/freetype-${PKG_VERSION}.tar.xz#' \
+            LibreELEC.tv/packages/print/freetype/package.mk
+
           # LibreELEC 12.2.1 builds host tools with -march=native. That is not
           # safe when ccache is restored on a different GitHub runner CPU:
           # cached host objects may contain instructions unsupported by the next
@@ -557,6 +572,21 @@ jobs:
             LibreELEC.tv/packages/sysutils/udevil/package.mk
           grep '^PKG_URL=' LibreELEC.tv/packages/sysutils/udevil/package.mk
           grep '^PKG_SHA256=' LibreELEC.tv/packages/sysutils/udevil/package.mk
+
+          # JJS_SOURCE_MIRROR_FIX_V1: GitHub runners currently cannot reliably
+          # reach ftp.gnu.org or Savannah. Use mirrors carrying the identical
+          # release archives; LibreELEC's pinned SHA256 values remain authoritative.
+          find LibreELEC.tv/packages -type f -name package.mk -print0 | xargs -0 sed -i \
+            -e 's#https://ftp.gnu.org/pub/gnu/#https://mirrors.kernel.org/gnu/#g' \
+            -e 's#https://ftp.gnu.org/gnu/#https://mirrors.kernel.org/gnu/#g'
+
+          sed -i \
+            's#http://download.savannah.nongnu.org/releases/attr/${PKG_NAME}-${PKG_VERSION}.tar.gz#https://mirror.fi.ossplanet.net/nongnu/attr/${PKG_NAME}-${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/devel/attr/package.mk
+
+          sed -i \
+            's#https://download.savannah.gnu.org/releases/freetype/freetype-${PKG_VERSION}.tar.xz#https://downloads.sourceforge.net/project/freetype/freetype2/${PKG_VERSION}/freetype-${PKG_VERSION}.tar.xz#' \
+            LibreELEC.tv/packages/print/freetype/package.mk
 
           # LibreELEC 12.2.1 builds host tools with -march=native. That is not
           # safe when ccache is restored on a different GitHub runner CPU:
