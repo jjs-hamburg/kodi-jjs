@@ -1,10 +1,10 @@
-name: Build Kodi JJS 21.3 ARM64 APK
+name: Build Kodi JJS 21.3 ARTIST CACHE DIAG ARM64 APK
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - build/21.3-jjs-008-android
+      - build/diag-jjs008-artist-cache-android
 
 permissions:
   contents: read
@@ -16,8 +16,8 @@ jobs:
 
     env:
       KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
-      KODI_REF: fix/jjs008-progress-lifecycle
-      EXPECTED_KODI_COMMIT: ab07a745fe9a051452004740ba481fa89fc292ac
+      KODI_REF: test/jjs008-android-tv-banner
+      EXPECTED_KODI_COMMIT: 552c6714e0078ea394ab3cc869ab1d0f4f8f70b4
       EXPECTED_INTERNAL_APP_NAME: Kodi
       SOURCE_DISPLAY_NAME: Kodi JJS
       SOURCE_PACKAGE: org.jjs.kodi
@@ -27,7 +27,7 @@ jobs:
       EXPECTED_VERSION_NAME: "21.3-JJS.008"
       JJS_BUILD: "008"
       JJS_VERSION_TAG: "JJS.008"
-      JJS_ARTIFACT_NAME: Kodi-JJS-21.3-JJS.008-arm64
+      JJS_ARTIFACT_NAME: Kodi-JJS-21.3-JJS.008-ARTCACHE-DIAG-arm64
       EXPECTED_SIGNING_CERT_SHA256: caddfcba2d9ad9b880d410a048dd19c5212e2994669f226724250439a20840c6
       ANDROID_NDK_VERSION: 21.4.7075529
       ANDROID_BUILD_TOOLS_VERSION: 33.0.1
@@ -94,7 +94,7 @@ jobs:
             android-tools/xbmc-depends
           key: kodi-21.3-arm64-depends-r21e-v1
 
-      - name: Fetch pinned Kodi JJS source
+      - name: Fetch pinned Kodi JJS.008 production source
         shell: bash
         run: |
           set -euxo pipefail
@@ -110,15 +110,673 @@ jobs:
           git -C kodi diff --check
           test -z "$(git -C kodi status --porcelain)"
 
-      - name: Verify final source tree is clean
+      - name: Inject targeted artist texture-cache diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          root = Path("kodi")
+
+          def replace_once(rel, old, new):
+              path = root / rel
+              text = path.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{rel}: expected exactly one anchor, got {count}")
+              path.write_text(text.replace(old, new, 1))
+
+          # ------------------------------------------------------------------
+          # xbmc/TextureCache.cpp
+          # ------------------------------------------------------------------
+          replace_once(
+              "xbmc/TextureCache.cpp",
+              "using namespace XFILE;\nusing namespace std::chrono_literals;\n\nCTextureCache::CTextureCache()",
+              "using namespace XFILE;\nusing namespace std::chrono_literals;\n\n"
+              "namespace\n{\n"
+              "bool JjsArtistCacheTrace(const std::string& value)\n"
+              "{\n"
+              "  return value.find(\"Bert\") != std::string::npos ||\n"
+              "         value.find(\"Kaempfert\") != std::string::npos ||\n"
+              "         value.find(\"Beniamino\") != std::string::npos ||\n"
+              "         value.find(\"Gigli\") != std::string::npos;\n"
+              "}\n"
+              "} // namespace\n\n"
+              "CTextureCache::CTextureCache()"
+          )
+
+          replace_once(
+              "xbmc/TextureCache.cpp",
+              '''std::string CTextureCache::GetCachedImage(const std::string &image, CTextureDetails &details, bool trackUsage)
+          {
+            std::string url = CTextureUtils::UnwrapImageURL(image);
+            if (url.empty())
+              return "";
+            if (IsCachedImage(url))
+              return url;
+
+            // lookup the item in the database
+            if (GetCachedTexture(url, details))
+            {
+              if (details.file.empty())
+                return {};
+
+              if (trackUsage)
+                IncrementUseCount(details);
+              return GetCachedPath(details.file);
+            }
+            return "";
+          }
+          ''',
+              '''std::string CTextureCache::GetCachedImage(const std::string &image, CTextureDetails &details, bool trackUsage)
+          {
+            std::string url = CTextureUtils::UnwrapImageURL(image);
+            const bool jjsTrace = JjsArtistCacheTrace(image) || JjsArtistCacheTrace(url);
+            if (jjsTrace)
+              CLog::Log(LOGINFO, "[JJS-ARTCACHE][GetCachedImage] request='{}' unwrapped='{}' trackUsage={}",
+                        CURL::GetRedacted(image), CURL::GetRedacted(url), trackUsage);
+
+            if (url.empty())
+              return "";
+            if (IsCachedImage(url))
+            {
+              if (jjsTrace)
+                CLog::Log(LOGINFO, "[JJS-ARTCACHE][GetCachedImage] ALREADY-CACHED-PATH '{}'",
+                          CURL::GetRedacted(url));
+              return url;
+            }
+
+            // lookup the item in the database
+            const bool dbHit = GetCachedTexture(url, details);
+            if (jjsTrace)
+              CLog::Log(LOGINFO,
+                        "[JJS-ARTCACHE][GetCachedImage] DB-HIT={} file='{}' hash='{}'",
+                        dbHit, details.file, details.hash);
+            if (dbHit)
+            {
+              if (details.file.empty())
+                return {};
+
+              if (trackUsage)
+                IncrementUseCount(details);
+              const std::string cachedPath = GetCachedPath(details.file);
+              if (jjsTrace)
+                CLog::Log(LOGINFO, "[JJS-ARTCACHE][GetCachedImage] RETURN-LOCAL '{}'",
+                          CURL::GetRedacted(cachedPath));
+              return cachedPath;
+            }
+            if (jjsTrace)
+              CLog::Log(LOGINFO, "[JJS-ARTCACHE][GetCachedImage] CACHE-MISS");
+            return "";
+          }
+          ''')
+
+          replace_once(
+              "xbmc/TextureCache.cpp",
+              '''void CTextureCache::BackgroundCacheImage(const std::string &url)
+          {
+            if (url.empty())
+              return;
+
+            CTextureDetails details;
+            std::string path(GetCachedImage(url, details));
+            if (!path.empty() && details.hash.empty())
+              return; // image is already cached and doesn't need to be checked further
+
+            path = CTextureUtils::UnwrapImageURL(url);
+            if (path.empty())
+              return;
+
+            // needs (re)caching
+            AddJob(new CTextureCacheJob(path, details.hash));
+          }
+          ''',
+              '''void CTextureCache::BackgroundCacheImage(const std::string &url)
+          {
+            if (url.empty())
+              return;
+
+            const bool jjsTrace = JjsArtistCacheTrace(url);
+            CTextureDetails details;
+            std::string path(GetCachedImage(url, details));
+            if (jjsTrace)
+              CLog::Log(LOGINFO,
+                        "[JJS-ARTCACHE][BackgroundCacheImage] lookup path='{}' hash='{}'",
+                        CURL::GetRedacted(path), details.hash);
+            if (!path.empty() && details.hash.empty())
+            {
+              if (jjsTrace)
+                CLog::Log(LOGINFO, "[JJS-ARTCACHE][BackgroundCacheImage] STOP-LOCAL-CACHE-VALID");
+              return; // image is already cached and doesn't need to be checked further
+            }
+
+            path = CTextureUtils::UnwrapImageURL(url);
+            if (path.empty())
+              return;
+
+            if (jjsTrace)
+              CLog::Log(LOGINFO,
+                        "[JJS-ARTCACHE][BackgroundCacheImage] QUEUE-CACHE-JOB source='{}' oldHash='{}'",
+                        CURL::GetRedacted(path), details.hash);
+            // needs (re)caching
+            AddJob(new CTextureCacheJob(path, details.hash));
+          }
+          ''')
+
+          replace_once(
+              "xbmc/TextureCache.cpp",
+              '''  std::string url = CTextureUtils::UnwrapImageURL(image);
+            if (url.empty())
+              return "";
+
+            std::unique_lock<CCriticalSection> lock(m_processingSection);
+          ''',
+              '''  std::string url = CTextureUtils::UnwrapImageURL(image);
+            if (url.empty())
+              return "";
+
+            const bool jjsTrace = JjsArtistCacheTrace(image) || JjsArtistCacheTrace(url);
+            if (jjsTrace)
+              CLog::Log(LOGINFO, "[JJS-ARTCACHE][CacheImage] request='{}' source='{}'",
+                        CURL::GetRedacted(image), CURL::GetRedacted(url));
+
+            std::unique_lock<CCriticalSection> lock(m_processingSection);
+          ''')
+
+          replace_once(
+              "xbmc/TextureCache.cpp",
+              '''    // cache the texture directly
+              CTextureCacheJob job(url);
+          ''',
+              '''    // cache the texture directly
+              if (jjsTrace)
+                CLog::Log(LOGINFO, "[JJS-ARTCACHE][CacheImage] DIRECT-CACHE-JOB source='{}'",
+                          CURL::GetRedacted(url));
+              CTextureCacheJob job(url);
+          ''')
+
+          replace_once(
+              "xbmc/TextureCache.cpp",
+              '''void CTextureCache::OnCachingComplete(bool success, CTextureCacheJob *job)
+          {
+            if (success)
+          ''',
+              '''void CTextureCache::OnCachingComplete(bool success, CTextureCacheJob *job)
+          {
+            if (JjsArtistCacheTrace(job->m_url))
+              CLog::Log(LOGINFO,
+                        "[JJS-ARTCACHE][OnCachingComplete] success={} source='{}' file='{}' hash='{}' updateable={} revalidated={}",
+                        success, CURL::GetRedacted(job->m_url), job->m_details.file,
+                        job->m_details.hash, job->m_details.updateable, job->m_details.hashRevalidated);
+            if (success)
+          ''')
+
+          # ------------------------------------------------------------------
+          # xbmc/TextureCacheJob.cpp
+          # ------------------------------------------------------------------
+          replace_once(
+              "xbmc/TextureCacheJob.cpp",
+              '''#include "PlatformDefs.h"
+
+          CTextureCacheJob::CTextureCacheJob''',
+              '''#include "PlatformDefs.h"
+
+          namespace
+          {
+          bool JjsArtistCacheTrace(const std::string& value)
+          {
+            return value.find("Bert") != std::string::npos ||
+                   value.find("Kaempfert") != std::string::npos ||
+                   value.find("Beniamino") != std::string::npos ||
+                   value.find("Gigli") != std::string::npos;
+          }
+          } // namespace
+
+          CTextureCacheJob::CTextureCacheJob''')
+
+          replace_once(
+              "xbmc/TextureCacheJob.cpp",
+              '''bool CTextureCacheJob::DoWork()
+          {
+            if (ShouldCancel(0, 0))
+              return false;
+
+            // check whether we need cache the job anyway
+            bool needsRecaching = false;
+            std::string path(CServiceBroker::GetTextureCache()->CheckCachedImage(m_url, needsRecaching));
+            if (!path.empty() && !needsRecaching)
+              return false;
+            if (CServiceBroker::GetTextureCache()->StartCacheImage(m_url))
+              return CacheTexture();
+
+            return false;
+          }
+          ''',
+              '''bool CTextureCacheJob::DoWork()
+          {
+            const bool jjsTrace = JjsArtistCacheTrace(m_url);
+            if (jjsTrace)
+              CLog::Log(LOGINFO, "[JJS-ARTCACHE][Job.DoWork] START source='{}'",
+                        CURL::GetRedacted(m_url));
+
+            if (ShouldCancel(0, 0))
+              return false;
+
+            // check whether we need cache the job anyway
+            bool needsRecaching = false;
+            std::string path(CServiceBroker::GetTextureCache()->CheckCachedImage(m_url, needsRecaching));
+            if (jjsTrace)
+              CLog::Log(LOGINFO,
+                        "[JJS-ARTCACHE][Job.DoWork] cachedPath='{}' needsRecaching={}",
+                        CURL::GetRedacted(path), needsRecaching);
+            if (!path.empty() && !needsRecaching)
+            {
+              if (jjsTrace)
+                CLog::Log(LOGINFO, "[JJS-ARTCACHE][Job.DoWork] STOP-CACHE-VALID");
+              return false;
+            }
+            const bool claimed = CServiceBroker::GetTextureCache()->StartCacheImage(m_url);
+            if (jjsTrace)
+              CLog::Log(LOGINFO, "[JJS-ARTCACHE][Job.DoWork] processingClaim={}", claimed);
+            if (claimed)
+              return CacheTexture();
+
+            return false;
+          }
+          ''')
+
+          start = '''bool CTextureCacheJob::CacheTexture(std::unique_ptr<CTexture>* out_texture)
+          {
+            // unwrap the URL as required
+            std::string additional_info;
+            unsigned int width, height;
+            CPictureScalingAlgorithm::Algorithm scalingAlgorithm;
+            std::string image = DecodeImageURL(m_url, width, height, scalingAlgorithm, additional_info);
+
+            m_details.updateable = ShouldCheckForChanges(additional_info, image);
+
+            if (m_details.updateable)
+            {
+              // generate the hash
+              m_details.hash = GetImageHash(image);
+              if (m_details.hash.empty())
+                return false;
+
+              if (m_details.hash == m_oldHash)
+              {
+                m_details.hashRevalidated = true;
+                return true;
+              }
+            }
+
+            std::unique_ptr<CTexture> texture = LoadImage(image, width, height, additional_info, true);
+            if (texture)
+            {
+              if (texture->HasAlpha())
+                m_details.file = m_cachePath + ".png";
+              else
+                m_details.file = m_cachePath + ".jpg";
+
+              CLog::Log(LOGDEBUG, "{} image '{}' to '{}':", m_oldHash.empty() ? "Caching" : "Recaching",
+                        CURL::GetRedacted(image), m_details.file);
+
+              if (CPicture::CacheTexture(texture.get(), width, height,
+                                         CTextureCache::GetCachedPath(m_details.file), scalingAlgorithm))
+              {
+                m_details.width = width;
+                m_details.height = height;
+                if (out_texture) // caller wants the texture
+                  *out_texture = std::move(texture);
+                return true;
+              }
+            }
+            return false;
+          }
+          '''
+          repl = '''bool CTextureCacheJob::CacheTexture(std::unique_ptr<CTexture>* out_texture)
+          {
+            // unwrap the URL as required
+            std::string additional_info;
+            unsigned int width, height;
+            CPictureScalingAlgorithm::Algorithm scalingAlgorithm;
+            std::string image = DecodeImageURL(m_url, width, height, scalingAlgorithm, additional_info);
+            const bool jjsTrace = JjsArtistCacheTrace(m_url) || JjsArtistCacheTrace(image);
+            if (jjsTrace)
+              CLog::Log(LOGINFO,
+                        "[JJS-ARTCACHE][Job.CacheTexture] url='{}' image='{}' oldHash='{}' info='{}'",
+                        CURL::GetRedacted(m_url), CURL::GetRedacted(image), m_oldHash, additional_info);
+
+            m_details.updateable = ShouldCheckForChanges(additional_info, image);
+            if (jjsTrace)
+              CLog::Log(LOGINFO, "[JJS-ARTCACHE][Job.CacheTexture] updateable={}",
+                        m_details.updateable);
+
+            if (m_details.updateable)
+            {
+              // generate the hash
+              m_details.hash = GetImageHash(image);
+              if (jjsTrace)
+                CLog::Log(LOGINFO, "[JJS-ARTCACHE][Job.CacheTexture] sourceHash='{}' oldHash='{}'",
+                          m_details.hash, m_oldHash);
+              if (m_details.hash.empty())
+              {
+                if (jjsTrace)
+                  CLog::Log(LOGINFO, "[JJS-ARTCACHE][Job.CacheTexture] FAIL-NO-HASH");
+                return false;
+              }
+
+              if (m_details.hash == m_oldHash)
+              {
+                m_details.hashRevalidated = true;
+                if (jjsTrace)
+                  CLog::Log(LOGINFO, "[JJS-ARTCACHE][Job.CacheTexture] REVALIDATED-NO-LOAD");
+                return true;
+              }
+            }
+
+            if (jjsTrace)
+              CLog::Log(LOGINFO, "[JJS-ARTCACHE][Job.CacheTexture] SOURCE-LOAD '{}'",
+                        CURL::GetRedacted(image));
+            std::unique_ptr<CTexture> texture = LoadImage(image, width, height, additional_info, true);
+            if (texture)
+            {
+              if (texture->HasAlpha())
+                m_details.file = m_cachePath + ".png";
+              else
+                m_details.file = m_cachePath + ".jpg";
+
+              CLog::Log(LOGDEBUG, "{} image '{}' to '{}':", m_oldHash.empty() ? "Caching" : "Recaching",
+                        CURL::GetRedacted(image), m_details.file);
+
+              if (CPicture::CacheTexture(texture.get(), width, height,
+                                         CTextureCache::GetCachedPath(m_details.file), scalingAlgorithm))
+              {
+                m_details.width = width;
+                m_details.height = height;
+                if (jjsTrace)
+                  CLog::Log(LOGINFO,
+                            "[JJS-ARTCACHE][Job.CacheTexture] WROTE-LOCAL file='{}' {}x{}",
+                            m_details.file, width, height);
+                if (out_texture) // caller wants the texture
+                  *out_texture = std::move(texture);
+                return true;
+              }
+            }
+            if (jjsTrace)
+              CLog::Log(LOGINFO, "[JJS-ARTCACHE][Job.CacheTexture] FAIL-SOURCE-OR-WRITE");
+            return false;
+          }
+          '''
+          replace_once("xbmc/TextureCacheJob.cpp", start, repl)
+
+          replace_once(
+              "xbmc/TextureCacheJob.cpp",
+              '''std::string CTextureCacheJob::GetImageHash(const std::string &url)
+          {
+            // silently ignore - we cannot stat these
+            // in the case of upnp thumbs are/should be provided when filling the directory list, there's no reason to stat all object ids
+            if (URIUtils::IsProtocol(url, "addons") || URIUtils::IsProtocol(url, "plugin") ||
+                URIUtils::IsProtocol(url, "upnp"))
+              return "";
+
+            struct __stat64 st;
+            if (XFILE::CFile::Stat(url, &st) == 0)
+            {
+              int64_t time = st.st_mtime;
+              if (!time)
+                time = st.st_ctime;
+              if (time || st.st_size)
+                return StringUtils::Format("d{}s{}", time, st.st_size);
+
+              // the image exists but we couldn't determine the mtime/ctime and/or size
+              // so set an obviously bad hash
+              return "BADHASH";
+            }
+
+            CLog::Log(LOGDEBUG, "{} - unable to stat url {}", __FUNCTION__, CURL::GetRedacted(url));
+            return "";
+          }
+          ''',
+              '''std::string CTextureCacheJob::GetImageHash(const std::string &url)
+          {
+            const bool jjsTrace = JjsArtistCacheTrace(url);
+            if (jjsTrace)
+              CLog::Log(LOGINFO, "[JJS-ARTCACHE][Job.GetImageHash] STAT-START '{}'",
+                        CURL::GetRedacted(url));
+
+            // silently ignore - we cannot stat these
+            // in the case of upnp thumbs are/should be provided when filling the directory list, there's no reason to stat all object ids
+            if (URIUtils::IsProtocol(url, "addons") || URIUtils::IsProtocol(url, "plugin") ||
+                URIUtils::IsProtocol(url, "upnp"))
+              return "";
+
+            struct __stat64 st;
+            if (XFILE::CFile::Stat(url, &st) == 0)
+            {
+              int64_t time = st.st_mtime;
+              if (!time)
+                time = st.st_ctime;
+              if (time || st.st_size)
+              {
+                const std::string hash = StringUtils::Format("d{}s{}", time, st.st_size);
+                if (jjsTrace)
+                  CLog::Log(LOGINFO,
+                            "[JJS-ARTCACHE][Job.GetImageHash] STAT-OK mtime={} size={} hash='{}'",
+                            time, st.st_size, hash);
+                return hash;
+              }
+
+              // the image exists but we couldn't determine the mtime/ctime and/or size
+              // so set an obviously bad hash
+              if (jjsTrace)
+                CLog::Log(LOGINFO, "[JJS-ARTCACHE][Job.GetImageHash] STAT-BADHASH");
+              return "BADHASH";
+            }
+
+            if (jjsTrace)
+              CLog::Log(LOGINFO, "[JJS-ARTCACHE][Job.GetImageHash] STAT-FAILED '{}''",
+                        CURL::GetRedacted(url));
+            CLog::Log(LOGDEBUG, "{} - unable to stat url {}", __FUNCTION__, CURL::GetRedacted(url));
+            return "";
+          }
+          ''')
+
+          # ------------------------------------------------------------------
+          # xbmc/guilib/TextureManager.cpp
+          # ------------------------------------------------------------------
+          replace_once(
+              "xbmc/guilib/TextureManager.cpp",
+              '''#include <exception>
+
+          /************************************************************************/''',
+              '''#include <exception>
+
+          namespace
+          {
+          bool JjsArtistCacheTrace(const std::string& value)
+          {
+            return value.find("Bert") != std::string::npos ||
+                   value.find("Kaempfert") != std::string::npos ||
+                   value.find("Beniamino") != std::string::npos ||
+                   value.find("Gigli") != std::string::npos;
+          }
+          } // namespace
+
+          /************************************************************************/''')
+
+          replace_once(
+              "xbmc/guilib/TextureManager.cpp",
+              '''bool CGUITextureManager::HasTexture(const std::string &textureName, std::string *path, int *bundle, int *size)
+          {
+            std::unique_lock<CCriticalSection> lock(m_section);
+
+            // default values
+          ''',
+              '''bool CGUITextureManager::HasTexture(const std::string &textureName, std::string *path, int *bundle, int *size)
+          {
+            std::unique_lock<CCriticalSection> lock(m_section);
+            const bool jjsTrace = JjsArtistCacheTrace(textureName);
+            if (jjsTrace)
+              CLog::Log(LOGINFO, "[JJS-ARTCACHE][TM.HasTexture] request='{}'",
+                        CURL::GetRedacted(textureName));
+
+            // default values
+          ''')
+
+          replace_once(
+              "xbmc/guilib/TextureManager.cpp",
+              '''    if (pMap->GetName() == textureName)
+              {
+                if (size) *size = 1;
+                return true;
+              }
+          ''',
+              '''    if (pMap->GetName() == textureName)
+              {
+                if (jjsTrace)
+                  CLog::Log(LOGINFO, "[JJS-ARTCACHE][TM.HasTexture] MEMORY-HIT-ACTIVE");
+                if (size) *size = 1;
+                return true;
+              }
+          ''')
+
+          replace_once(
+              "xbmc/guilib/TextureManager.cpp",
+              '''  std::string fullPath = GetTexturePath(textureName);
+            if (path)
+              *path = fullPath;
+
+            return !fullPath.empty();
+          }
+          ''',
+              '''  std::string fullPath = GetTexturePath(textureName);
+            if (jjsTrace)
+              CLog::Log(LOGINFO, "[JJS-ARTCACHE][TM.HasTexture] resolvedPath='{}'",
+                        CURL::GetRedacted(fullPath));
+            if (path)
+              *path = fullPath;
+
+            return !fullPath.empty();
+          }
+          ''')
+
+          replace_once(
+              "xbmc/guilib/TextureManager.cpp",
+              '''  int bundle = -1;
+            int size = 0;
+
+            if (strTextureName.empty())
+          ''',
+              '''  int bundle = -1;
+            int size = 0;
+            const bool jjsTrace = JjsArtistCacheTrace(strTextureName);
+            if (jjsTrace)
+              CLog::Log(LOGINFO, "[JJS-ARTCACHE][TM.Load] request='{}'",
+                        CURL::GetRedacted(strTextureName));
+
+            if (strTextureName.empty())
+          ''')
+
+          replace_once(
+              "xbmc/guilib/TextureManager.cpp",
+              '''  if (!HasTexture(strTextureName, &strPath, &bundle, &size))
+              return emptyTexture;
+
+            if (size) // we found the texture
+          ''',
+              '''  if (!HasTexture(strTextureName, &strPath, &bundle, &size))
+            {
+              if (jjsTrace)
+                CLog::Log(LOGINFO, "[JJS-ARTCACHE][TM.Load] HAS-TEXTURE-MISS");
+              return emptyTexture;
+            }
+            if (jjsTrace)
+              CLog::Log(LOGINFO,
+                        "[JJS-ARTCACHE][TM.Load] resolvedPath='{}' bundle={} activeSize={}",
+                        CURL::GetRedacted(strPath), bundle, size);
+
+            if (size) // we found the texture
+          ''')
+
+          replace_once(
+              "xbmc/guilib/TextureManager.cpp",
+              '''      if (pMap->GetName() == strTextureName)
+                {
+                  //CLog::Log(LOGDEBUG, "Total memusage {}", GetMemoryUsage());
+                  return pMap->GetTexture();
+                }
+          ''',
+              '''      if (pMap->GetName() == strTextureName)
+                {
+                  if (jjsTrace)
+                    CLog::Log(LOGINFO, "[JJS-ARTCACHE][TM.Load] RETURN-ACTIVE-MEMORY");
+                  //CLog::Log(LOGDEBUG, "Total memusage {}", GetMemoryUsage());
+                  return pMap->GetTexture();
+                }
+          ''')
+
+          replace_once(
+              "xbmc/guilib/TextureManager.cpp",
+              '''    if (pMap->GetName() == strTextureName && duration.count() > 0)
+              {
+                m_vecTextures.push_back(pMap);
+                m_unusedTextures.erase(i);
+                return pMap->GetTexture();
+              }
+          ''',
+              '''    if (pMap->GetName() == strTextureName && duration.count() > 0)
+              {
+                if (jjsTrace)
+                  CLog::Log(LOGINFO, "[JJS-ARTCACHE][TM.Load] RETURN-UNUSED-MEMORY");
+                m_vecTextures.push_back(pMap);
+                m_unusedTextures.erase(i);
+                return pMap->GetTexture();
+              }
+          ''')
+
+          replace_once(
+              "xbmc/guilib/TextureManager.cpp",
+              '''  else
+            {
+              pTexture = CTexture::LoadFromFile(strPath);
+              if (!pTexture)
+          ''',
+              '''  else
+            {
+              if (jjsTrace)
+                CLog::Log(LOGINFO, "[JJS-ARTCACHE][TM.Load] FILE-LOAD '{}'",
+                          CURL::GetRedacted(strPath));
+              pTexture = CTexture::LoadFromFile(strPath);
+              if (!pTexture)
+          ''')
+
+          for rel in ("xbmc/TextureCache.cpp", "xbmc/TextureCacheJob.cpp", "xbmc/guilib/TextureManager.cpp"):
+              if "[JJS-ARTCACHE]" not in (root / rel).read_text():
+                  raise SystemExit(f"diagnostic marker missing in {rel}")
+          PY
+
+          git -C kodi diff --check
+          echo "Diagnostic modifications:"
+          git -C kodi diff --stat
+          CHANGED_COUNT="$(git -C kodi diff --name-only | wc -l)"
+          test "${CHANGED_COUNT}" -eq 3
+          for f in xbmc/TextureCache.cpp xbmc/TextureCacheJob.cpp xbmc/guilib/TextureManager.cpp; do
+            git -C kodi diff --name-only | grep -qx "${f}"
+          done
+
+      - name: Verify diagnostic source identity
         shell: bash
         run: |
           set -euxo pipefail
-          git -C kodi diff --check
-          test -z "$(git -C kodi status --porcelain)"
           grep -qx "APP_PACKAGE ${EXPECTED_PACKAGE}" kodi/version.txt
+          grep -qx "VERSION_TAG ${JJS_VERSION_TAG}" kodi/version.txt
           grep -Fq "<string name=\"app_name\">${EXPECTED_DISPLAY_NAME}</string>" \
             kodi/tools/android/packaging/xbmc/strings.xml.in
+          grep -Fq '[JJS-ARTCACHE]' kodi/xbmc/TextureCache.cpp
+          grep -Fq '[JJS-ARTCACHE]' kodi/xbmc/TextureCacheJob.cpp
+          grep -Fq '[JJS-ARTCACHE]' kodi/xbmc/guilib/TextureManager.cpp
+          git -C kodi diff --check
 
       - name: Configure Kodi Android ARM64 depends
         working-directory: kodi/tools/depends
@@ -147,7 +805,7 @@ jobs:
           mkdir -p "${KODI_BUILD}"
           make -C tools/depends/target/cmakebuildsys BUILD_DIR="${KODI_BUILD}"
 
-      - name: Build Kodi JJS
+      - name: Build Kodi JJS diagnostic APK
         working-directory: kodi-build
         run: |
           set -euxo pipefail
@@ -193,7 +851,7 @@ jobs:
           make apk
           df -h /
 
-      - name: Verify and collect installable APK
+      - name: Verify and collect installable in-place diagnostic APK
         shell: bash
         run: |
           set -euo pipefail
@@ -226,7 +884,7 @@ jobs:
           fi
 
           SHORT_COMMIT="${EXPECTED_KODI_COMMIT:0:7}"
-          APK_BASENAME="Kodi-JJS-${EXPECTED_VERSION_NAME}-${SHORT_COMMIT}-arm64.apk"
+          APK_BASENAME="Kodi-JJS-${EXPECTED_VERSION_NAME}-${SHORT_COMMIT}-ARTCACHE-DIAG-arm64.apk"
           cp "${APK}" "artifact/${APK_BASENAME}"
           APK_SHA256="$(sha256sum "artifact/${APK_BASENAME}" | awk '{print $1}')"
           LIB_SHA256="$(unzip -p "artifact/${APK_BASENAME}" lib/arm64-v8a/libkodi.so | sha256sum | awk '{print $1}')"
@@ -234,7 +892,8 @@ jobs:
           cat > artifact/BUILD-INFO.txt <<EOF
           Kodi repository: ${KODI_REPO}
           Kodi source ref: ${KODI_REF}
-          Kodi source commit: ${EXPECTED_KODI_COMMIT}
+          Kodi production source commit: ${EXPECTED_KODI_COMMIT}
+          Diagnostic: targeted artist texture-cache trace for Bert Kaempfert / Beniamino Gigli
           Kodi JJS build: ${JJS_BUILD}
           Kodi JJS version tag: ${JJS_VERSION_TAG}
           Android display name: ${EXPECTED_DISPLAY_NAME}
@@ -247,11 +906,12 @@ jobs:
           APK SHA256: ${APK_SHA256}
           libkodi.so SHA256: ${LIB_SHA256}
           Wrapper commit: ${GITHUB_SHA}
+          Log marker: [JJS-ARTCACHE]
           EOF
 
           sha256sum "artifact/${APK_BASENAME}" > artifact/SHA256SUMS.txt
 
-      - name: Upload ready-to-install Kodi JJS APK
+      - name: Upload ready-to-install Kodi JJS diagnostic APK
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.JJS_ARTIFACT_NAME }}
