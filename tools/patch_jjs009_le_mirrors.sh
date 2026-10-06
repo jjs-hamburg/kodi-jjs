@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-git config user.name "github-actions[bot]"
-git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-patch_branch() {
+make_blob() {
   branch="$1"
+  label="$2"
+
   git fetch --no-tags origin "$branch"
   git checkout -B work FETCH_HEAD
 
@@ -45,25 +44,34 @@ text = text.replace(marker, block + marker)
 path.write_text(text, encoding='utf-8')
 PY
 
-  test "$(grep -c 'JJS_SOURCE_MIRROR_FIX_V1' .github/workflows/jjs-libreelec-12.2.1-test.yml)" -eq 2
+  file=.github/workflows/jjs-libreelec-12.2.1-test.yml
+  test "$(grep -c 'JJS_SOURCE_MIRROR_FIX_V1' "$file")" -eq 2
   git diff --check
-  git diff -- .github/workflows/jjs-libreelec-12.2.1-test.yml
-  git add .github/workflows/jjs-libreelec-12.2.1-test.yml
-  git commit -m "Use stable mirrors for LibreELEC 12.2.1 sources"
-  git push origin HEAD:"$branch"
-}
+  git diff -- "$file"
 
-patch_branch build/21.3-jjs-009-libreelec
-patch_branch build/21.3-jjs-009-rpi4
+  python3 - "$file" > /tmp/blob-request.json <<'PY'
+import base64
+import json
+from pathlib import Path
+import sys
 
-for branch in build/21.3-jjs-009-libreelec build/21.3-jjs-009-rpi4; do
+raw = Path(sys.argv[1]).read_bytes()
+json.dump({'content': base64.b64encode(raw).decode('ascii'), 'encoding': 'base64'}, sys.stdout)
+PY
+
   curl --fail-with-body --silent --show-error \
     -X POST \
     -H "Accept: application/vnd.github+json" \
     -H "Authorization: Bearer ${GH_TOKEN}" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
-    -d "{\"ref\":\"${branch}\"}" \
-    "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/jjs-libreelec-12.2.1-test.yml/dispatches"
-done
+    --data-binary @/tmp/blob-request.json \
+    "https://api.github.com/repos/${GITHUB_REPOSITORY}/git/blobs" \
+    > /tmp/blob-response.json
 
-git push origin --delete infra/jjs009-libreelec-source-mirrors
+  sha="$(python3 -c 'import json; print(json.load(open("/tmp/blob-response.json"))["sha"])')"
+  test -n "$sha"
+  echo "PATCHED_BLOB_${label}=${sha}"
+}
+
+make_blob build/21.3-jjs-009-libreelec X86
+make_blob build/21.3-jjs-009-rpi4 RPI4
