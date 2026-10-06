@@ -1,0 +1,51 @@
+name: Seed fontconfig 2.14.0 dependency cache
+
+on:
+  push:
+    branches:
+      - build/diag-jjs008-artist-cache-android
+    paths:
+      - .github/workflows/seed-fontconfig-2.14.0-cache.yml
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download and verify fontconfig 2.14.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${GITHUB_WORKSPACE}/android-tools/xbmc-tarballs"
+          OUT="${GITHUB_WORKSPACE}/android-tools/xbmc-tarballs/fontconfig-2.14.0.tar.xz"
+          EXPECTED="a5257249d031b3cd1a7b1521cd58f48d235a970020da4136a727db5407ec98e74a3776bc467d7e39f30ec664f56ff9fe39068317744a5e737a65109f7a005bfc"
+          URLS=(
+            "https://mirrors.kodi.tv/build-deps/sources/fontconfig-2.14.0.tar.xz"
+            "https://ftp2.osuosl.org/pub/blfs/conglomeration/fontconfig/fontconfig-2.14.0.tar.xz"
+            "https://gstreamer.freedesktop.org/src/mirror/fontconfig-2.14.0.tar.xz"
+          )
+
+          ok=0
+          for url in "${URLS[@]}"; do
+            echo "Trying ${url}"
+            rm -f "${OUT}"
+            if curl -fLsS --retry 3 --retry-all-errors --connect-timeout 20 -o "${OUT}" "${url}"; then
+              FOUND="$(sha512sum "${OUT}" | awk '{print $1}')"
+              echo "SHA512 ${FOUND}"
+              if [ "${FOUND}" = "${EXPECTED}" ]; then
+                ok=1
+                break
+              fi
+            fi
+          done
+
+          test "${ok}" = "1"
+          echo "${EXPECTED}  ${OUT}" | sha512sum -c -
+
+      - name: Save verified dependency tarball cache
+        uses: actions/cache/save@v4
+        with:
+          path: android-tools/xbmc-tarballs
+          key: kodi-21.3-arm64-depends-r21e-v1
