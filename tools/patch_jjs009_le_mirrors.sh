@@ -5,6 +5,8 @@ make_blob() {
   branch="$1"
   label="$2"
 
+  git reset --hard
+  git clean -fd
   git fetch --no-tags origin "$branch"
   git checkout -B work FETCH_HEAD
 
