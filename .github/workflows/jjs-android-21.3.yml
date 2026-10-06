@@ -94,18 +94,42 @@ jobs:
             android-tools/xbmc-depends
           key: kodi-21.3-arm64-depends-r21e-v1
 
-      - name: Seed verified fontconfig source archive
+      - name: Seed verified build source archives
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "${KODI_TARBALLS}"
-          ARCHIVE="${KODI_TARBALLS}/fontconfig-2.14.0.tar.xz"
-          EXPECTED_SHA512="a5257249d031b3cd1a7b1521cd58f48d235a970020da4136a727db5407ec98e74a3776bc467d7e39f30ec664f56ff9fe39068317744a5e737a65109f7a005bfc"
-          rm -f "${ARCHIVE}" "${ARCHIVE}.sha512"
-          curl --fail --location --retry 5 --retry-delay 2 \
-            --output "${ARCHIVE}" \
-            "https://gstreamer.freedesktop.org/src/mirror/fontconfig-2.14.0.tar.xz"
-          printf '%s  %s\n' "${EXPECTED_SHA512}" "${ARCHIVE}" | sha512sum --check --strict
+
+          fetch_verified() {
+            local name="$1"
+            local url="$2"
+            local sha512="$3"
+            local target="${KODI_TARBALLS}/${name}"
+            rm -f "${target}" "${target}.sha512"
+            curl --http1.1 --fail --location --retry 5 --retry-all-errors --retry-delay 2 \
+              --output "${target}" "${url}"
+            printf '%s  %s\n' "${sha512}" "${target}" | sha512sum --check --strict
+          }
+
+          fetch_verified \
+            "fontconfig-2.14.0.tar.xz" \
+            "https://gstreamer.freedesktop.org/src/mirror/fontconfig-2.14.0.tar.xz" \
+            "a5257249d031b3cd1a7b1521cd58f48d235a970020da4136a727db5407ec98e74a3776bc467d7e39f30ec664f56ff9fe39068317744a5e737a65109f7a005bfc"
+
+          fetch_verified \
+            "apache-groovy-binary-4.0.26.zip" \
+            "https://archive.apache.org/dist/groovy/4.0.26/distribution/apache-groovy-binary-4.0.26.zip" \
+            "60d1aea85008a438a9498178dc2137385653f1ea294e7e257959e9e0f94382e160e217e1090047c2a944e328cf46e8ebcfc4b015f7d0cb9f2fcf9d880c6c1344"
+
+          fetch_verified \
+            "commons-lang3-3.17.0-bin.tar.gz" \
+            "https://archive.apache.org/dist/commons/lang/binaries/commons-lang3-3.17.0-bin.tar.gz" \
+            "8927a406a1bd084b548f89cf15fe4bc7567dcaa50ae8abae54e9c883c1574c648fcc8ad6c3abaa381dfbdf1801727ac5e6c4572063203a1dfac293d122282f05"
+
+          fetch_verified \
+            "commons-text-1.13.0-bin.tar.gz" \
+            "https://archive.apache.org/dist/commons/text/binaries/commons-text-1.13.0-bin.tar.gz" \
+            "a51667463e88b2d017c3baebb9bbe42c4e50cba96ffe19c89680e82002a4db8b9007daff75f8dbf8bf3725be13a3f03f3c2bc4e1f11e8e02dcab4408abdb44a1"
 
       - name: Fetch pinned Kodi JJS source
         shell: bash
