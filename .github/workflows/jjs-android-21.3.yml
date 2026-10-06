@@ -1,10 +1,10 @@
-name: Build Kodi JJS 21.3 ARM64 APK
+name: Build Kodi JJS 21.3 ARTIST ART BATCH TEST ARM64 APK
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - build/test-jjs008-tv-banner
+      - build/test-jjs008-artist-art-batch-clean
 
 permissions:
   contents: read
@@ -16,8 +16,8 @@ jobs:
 
     env:
       KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
-      KODI_REF: test/jjs008-android-tv-banner
-      EXPECTED_KODI_COMMIT: 552c6714e0078ea394ab3cc869ab1d0f4f8f70b4
+      KODI_REF: test/jjs008-artist-art-batch
+      EXPECTED_KODI_COMMIT: a1d8f8637f5ee97a6cb9f9a4b162e72506d73144
       EXPECTED_INTERNAL_APP_NAME: Kodi
       SOURCE_DISPLAY_NAME: Kodi JJS
       SOURCE_PACKAGE: org.jjs.kodi
@@ -27,7 +27,7 @@ jobs:
       EXPECTED_VERSION_NAME: "21.3-JJS.008"
       JJS_BUILD: "008"
       JJS_VERSION_TAG: "JJS.008"
-      JJS_ARTIFACT_NAME: Kodi-JJS-21.3-JJS.008-arm64
+      JJS_ARTIFACT_NAME: Kodi-JJS-21.3-JJS.008-ART-BATCH-TEST-arm64
       EXPECTED_SIGNING_CERT_SHA256: caddfcba2d9ad9b880d410a048dd19c5212e2994669f226724250439a20840c6
       ANDROID_NDK_VERSION: 21.4.7075529
       ANDROID_BUILD_TOOLS_VERSION: 33.0.1
