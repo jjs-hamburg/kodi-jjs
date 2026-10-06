@@ -14,7 +14,7 @@ from pathlib import Path
 
 path = Path('.github/workflows/jjs-libreelec-12.2.1-test.yml')
 text = path.read_text(encoding='utf-8')
-marker = '          # LibreELEC 12.2.1 builds host tools with -march=native.\n'
+marker = '          # LibreELEC 12.2.1 builds host tools with -march=native.'
 tag = 'JJS_SOURCE_MIRROR_FIX_V1'
 
 if tag in text:
