@@ -1,0 +1,58 @@
+name: TEMP retarget artist artwork batch build
+
+on:
+  push:
+    branches:
+      - build/test-jjs008-artist-art-batch
+    paths:
+      - .github/workflows/temp-retarget-artist-art-batch-build.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: build/test-jjs008-artist-art-batch
+          fetch-depth: 0
+
+      - name: Retarget existing Android diagnostic workflow
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/jjs-android-21.3.yml')
+          text = path.read_text()
+          replacements = {
+              'name: Build Kodi JJS 21.3 ARTIST CACHE DIAG ARM64 APK':
+                  'name: Build Kodi JJS 21.3 ARTIST ART BATCH TEST ARM64 APK',
+              '      - build/diag-jjs008-artist-cache-android':
+                  '      - build/test-jjs008-artist-art-batch',
+              '      KODI_REF: test/jjs008-android-tv-banner':
+                  '      KODI_REF: test/jjs008-artist-art-batch',
+              '      EXPECTED_KODI_COMMIT: 552c6714e0078ea394ab3cc869ab1d0f4f8f70b4':
+                  '      EXPECTED_KODI_COMMIT: a1d8f8637f5ee97a6cb9f9a4b162e72506d73144',
+              '      JJS_ARTIFACT_NAME: Kodi-JJS-21.3-JJS.008-ARTCACHE-DIAG-arm64':
+                  '      JJS_ARTIFACT_NAME: Kodi-JJS-21.3-JJS.008-ART-BATCH-TEST-arm64',
+          }
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'anchor count for {old!r}: {count}, expected 1')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+
+      - name: Commit build retarget
+        shell: bash
+        run: |
+          git config user.name "jjs-hamburg"
+          git config user.email "jjschaefer@jjschaefer.de"
+          git add .github/workflows/jjs-android-21.3.yml
+          git diff --cached --check
+          git commit -m "Build artist artwork batch test APK"
+          git push origin HEAD:build/test-jjs008-artist-art-batch
