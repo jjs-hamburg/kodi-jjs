@@ -5638,6 +5638,50 @@ bool CMusicDatabase::GetArtistsByWhere(
     // Get Artists from returned rows
     items.Reserve(results.size());
     const dbiplus::query_data& data = m_pDS->get_result_set().records;
+
+    // Fetch artwork for all artists in this view with one database query. This avoids
+    // one network round-trip per artist when the music database is hosted on MySQL/MariaDB.
+    // If the batch query fails, leave libraryartfilled unset so the existing thumb loader
+    // falls back to its normal per-item artwork lookup.
+    std::map<int, std::map<std::string, std::string>> artistArt;
+    bool artistArtPrefetched = false;
+    if (m_pDS2 && !results.empty())
+    {
+      try
+      {
+        std::string artSQL =
+            "SELECT media_id, type, url FROM art WHERE media_type='artist' AND media_id IN (";
+        bool firstArtist = true;
+        for (const auto& result : results)
+        {
+          unsigned int artTargetRow = (unsigned int)result.at(FieldRow).asInteger();
+          const dbiplus::sql_record* const artistRecord = data.at(artTargetRow);
+          if (!firstArtist)
+            artSQL += ",";
+          artSQL += std::to_string(artistRecord->at(artist_idArtist).get_asInt());
+          firstArtist = false;
+        }
+        artSQL += ")";
+
+        if (m_pDS2->query(artSQL))
+        {
+          while (!m_pDS2->eof())
+          {
+            artistArt[m_pDS2->fv("media_id").get_asInt()]
+                     [m_pDS2->fv("type").get_asString()] =
+                m_pDS2->fv("url").get_asString();
+            m_pDS2->next();
+          }
+          artistArtPrefetched = true;
+        }
+        m_pDS2->close();
+      }
+      catch (...)
+      {
+        m_pDS2->close();
+      }
+    }
+
     for (const auto& i : results)
     {
       unsigned int targetRow = (unsigned int)i.at(FieldRow).asInteger();
@@ -5657,6 +5701,14 @@ bool CMusicDatabase::GetArtistsByWhere(
         // Set icon now to avoid slow per item processing in FillInDefaultIcon later
         pItem->SetProperty("icon_never_overlay", true);
         pItem->SetArt("icon", "DefaultArtist.png");
+
+        if (artistArtPrefetched)
+        {
+          auto artIt = artistArt.find(artist.idArtist);
+          if (artIt != artistArt.end())
+            pItem->AppendArt(artIt->second);
+          pItem->SetProperty("libraryartfilled", true);
+        }
 
         SetPropertiesFromArtist(*pItem, artist);
         items.Add(pItem);
