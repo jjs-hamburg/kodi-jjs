@@ -94,6 +94,19 @@ jobs:
             android-tools/xbmc-depends
           key: kodi-21.3-arm64-depends-r21e-v1
 
+      - name: Seed verified fontconfig source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${KODI_TARBALLS}"
+          ARCHIVE="${KODI_TARBALLS}/fontconfig-2.14.0.tar.xz"
+          EXPECTED_SHA512="a5257249d031b3cd1a7b1521cd58f48d235a970020da4136a727db5407ec98e74a3776bc467d7e39f30ec664f56ff9fe39068317744a5e737a65109f7a005bfc"
+          rm -f "${ARCHIVE}" "${ARCHIVE}.sha512"
+          curl --fail --location --retry 5 --retry-delay 2 \
+            --output "${ARCHIVE}" \
+            "https://gstreamer.freedesktop.org/src/mirror/fontconfig-2.14.0.tar.xz"
+          printf '%s  %s\n' "${EXPECTED_SHA512}" "${ARCHIVE}" | sha512sum --check --strict
+
       - name: Fetch pinned Kodi JJS source
         shell: bash
         run: |
