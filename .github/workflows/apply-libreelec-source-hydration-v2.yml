@@ -1,0 +1,175 @@
+name: Apply frozen LibreELEC source hydration v2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - source-snapshot/libreelec-12.2.1-jjs-v1
+    paths:
+      - .github/workflows/apply-libreelec-source-hydration-v2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    name: Patch exact green LibreELEC wrapper branches
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout only workflow path
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            .github/workflows/jjs-libreelec-12.2.1-test.yml
+
+      - name: Patch exact green workflow files
+        shell: bash
+        env:
+          X86_BRANCH: build/21.3-jjs-009-libreelec
+          X86_EXPECTED: 7438292b3e5496119ca538dc221bffcc11e96c32
+          RPI_BRANCH: build/21.3-jjs-009-rpi4
+          RPI_EXPECTED: 61fb93823b5b06d09517d0ceb1a243b2ea60bca3
+          ACTION_SHA: 8aa9540b6d08955f1af7b4efbdafa30c2bbbe976
+          WORKFLOW: .github/workflows/jjs-libreelec-12.2.1-test.yml
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          patch_branch() {
+            local branch="$1"
+            local expected="$2"
+            local platform="$3"
+            local cache_key="$4"
+
+            git fetch --depth=1 origin \
+              "+refs/heads/$branch:refs/remotes/origin/$branch"
+
+            local actual
+            actual="$(git rev-parse "origin/$branch")"
+            if [ "$actual" != "$expected" ]; then
+              echo "Refusing to patch $branch: expected $expected, found $actual" >&2
+              exit 1
+            fi
+
+            git checkout -B "$branch" "origin/$branch"
+
+            python3 - "$WORKFLOW" "$platform" "$cache_key" "$ACTION_SHA" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          platform = sys.argv[2]
+          cache_key = sys.argv[3]
+          action_sha = sys.argv[4]
+          text = path.read_text(encoding="utf-8")
+
+          pattern = re.compile(
+              r"(?ms)^      - name: Cache LibreELEC source archives\n"
+              r".*?"
+              r"(?=^      - name: Preflight all LibreELEC source downloads\n)"
+          )
+          blocks = list(pattern.finditer(text))
+          if len(blocks) != 2:
+              raise SystemExit(f"Expected exactly two source-cache steps, found {len(blocks)}")
+
+          old_key = f"key: {platform}-sources-v1"
+          old_prefix = f"{platform}-sources-"
+          for match in blocks:
+              block = match.group(0)
+              if old_key not in block or old_prefix not in block:
+                  raise SystemExit("Source-cache step does not match expected green platform key")
+
+          prime_count = sum(
+              "if: steps.ccache_seed.outputs.cache-hit != 'true'" in match.group(0)
+              for match in blocks
+          )
+          if prime_count != 1:
+              raise SystemExit(f"Expected one prime-job source cache, found {prime_count}")
+
+          def make_block(prime: bool) -> str:
+              lines = [
+                  "      - name: Cache frozen LibreELEC source snapshot",
+              ]
+              if prime:
+                  lines.append("        if: steps.ccache_seed.outputs.cache-hit != 'true'")
+              lines += [
+                  "        id: source_snapshot_cache",
+                  "        uses: actions/cache@v4",
+                  "        with:",
+                  "          path: LibreELEC.tv/sources",
+                  f"          key: {cache_key}",
+                  "",
+                  "      - name: Hydrate frozen LibreELEC source snapshot",
+              ]
+              if prime:
+                  lines.append(
+                      "        if: steps.ccache_seed.outputs.cache-hit != 'true' && steps.source_snapshot_cache.outputs.cache-hit != 'true'"
+                  )
+              else:
+                  lines.append("        if: steps.source_snapshot_cache.outputs.cache-hit != 'true'")
+              lines += [
+                  f"        uses: jjs-hamburg/kodi-jjs/.github/actions/hydrate-libreelec-12.2.1-sources@{action_sha}",
+                  "        with:",
+                  "          libreelec-dir: LibreELEC.tv",
+                  "",
+              ]
+              return "\n".join(lines)
+
+          def replace(match: re.Match[str]) -> str:
+              prime = "if: steps.ccache_seed.outputs.cache-hit != 'true'" in match.group(0)
+              return make_block(prime)
+
+          text, replaced = pattern.subn(replace, text)
+          if replaced != 2:
+              raise SystemExit(f"Expected two replacements, made {replaced}")
+
+          if text.count("hydrate-libreelec-12.2.1-sources@" + action_sha) != 2:
+              raise SystemExit("Expected exactly two pinned hydration references")
+          if old_key in text or old_prefix in text:
+              raise SystemExit("Old source cache key/prefix remains")
+          if text.count(f"key: {cache_key}") != 2:
+              raise SystemExit("Expected exactly two frozen snapshot cache keys")
+
+          path.write_text(text, encoding="utf-8")
+          PY
+
+            git diff --check
+            test "$(git diff --name-only | wc -l)" -eq 1
+            test "$(git diff --name-only)" = "$WORKFLOW"
+
+            echo "Validated diff for $branch:"
+            git diff -- "$WORKFLOW"
+
+            git add "$WORKFLOW"
+            git commit -m "Use frozen LibreELEC source snapshot [skip ci]"
+            git push origin "HEAD:refs/heads/$branch"
+          }
+
+          patch_branch \
+            "$X86_BRANCH" \
+            "$X86_EXPECTED" \
+            "libreelec-12.2.1-generic-x86_64" \
+            "libreelec-12.2.1-generic-x86_64-source-snapshot-v1"
+
+          patch_branch \
+            "$RPI_BRANCH" \
+            "$RPI_EXPECTED" \
+            "libreelec-12.2.1-rpi4-aarch64" \
+            "libreelec-12.2.1-rpi4-aarch64-source-snapshot-v1"
+
+      - name: Verify resulting branch heads
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin \
+            +refs/heads/build/21.3-jjs-009-libreelec:refs/remotes/origin/build/21.3-jjs-009-libreelec \
+            +refs/heads/build/21.3-jjs-009-rpi4:refs/remotes/origin/build/21.3-jjs-009-rpi4
+          echo "x86_64: $(git rev-parse origin/build/21.3-jjs-009-libreelec)"
+          echo "RPi4:   $(git rev-parse origin/build/21.3-jjs-009-rpi4)"
