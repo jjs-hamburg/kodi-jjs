@@ -66,7 +66,10 @@ void CMusicInfoLoader::OnLoaderStart()
   m_musicDatabase.Open();
 
   if (m_thumbLoader)
+  {
+    m_thumbLoader->SetPrefetchItems(*m_pVecItems);
     m_thumbLoader->OnLoaderStart();
+  }
 }
 
 bool CMusicInfoLoader::LoadAdditionalTagInfo(CFileItem* pItem)
