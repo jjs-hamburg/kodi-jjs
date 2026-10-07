@@ -11,8 +11,10 @@
 #include "ThumbLoader.h"
 
 #include <map>
+#include <vector>
 
 class CFileItem;
+class CFileItemList;
 class CMusicDatabase;
 class EmbeddedArt;
 
@@ -24,6 +26,13 @@ public:
 
   void OnLoaderStart() override;
   void OnLoaderFinish() override;
+
+  /*! \brief Supply a complete list for batch prefetch when this loader is driven manually.
+   Normal background loading already has the list in CBackgroundInfoLoader::m_vecItems.
+   MusicInfoLoader drives its thumb loader item-by-item, so it supplies the outer list here.
+   \param items music file list whose cached path artwork should be prefetched
+   */
+  void SetPrefetchItems(const CFileItemList& items);
 
   bool LoadItem(CFileItem* pItem) override;
   bool LoadItemCached(CFileItem* pItem) override;
@@ -61,7 +70,9 @@ protected:
 private:
   void PrefetchLibraryArt();
   void PrefetchCachedImages();
+  const std::vector<CFileItemPtr>& GetPrefetchItems() const;
 
+  std::vector<CFileItemPtr> m_manualPrefetchItems;
   std::map<std::string, std::map<std::string, std::string>> m_cachedPathArt;
   bool m_cachedPathArtPrefetched{false};
 };
