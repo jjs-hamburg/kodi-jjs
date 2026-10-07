@@ -1,0 +1,350 @@
+name: Snapshot LibreELEC 12.2.1 source archives
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - source-snapshot/libreelec-12.2.1-jjs-v1
+    paths:
+      - .github/workflows/libreelec-source-snapshot.yml
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    name: Download, verify and freeze LibreELEC sources
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+
+    env:
+      LE_REPO: https://github.com/LibreELEC/LibreELEC.tv.git
+      LE_REF: 12.2.1
+      LE_COMMIT: 6209f5a3b067c45fbf527286dd84ee483294b46a
+      KODI_JJS: 442f3ecace492765b2014b1249ec97d81c180c59
+      X86_GREEN_WRAPPER: 7438292b3e5496119ca538dc221bffcc11e96c32
+      RPI4_GREEN_WRAPPER: 61fb93823b5b06d09517d0ceb1a243b2ea60bca3
+      SNAPSHOT_TAG: libreelec-12.2.1-jjs-sources-v1
+      SNAPSHOT_BASENAME: LibreELEC-12.2.1-JJS-sources-v1
+
+    steps:
+      - name: Free runner disk space
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/.ghcup
+          df -h /
+
+      - name: Install LibreELEC download dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            wget curl bash bc gcc-12 sed patch patchutils tar bzip2 gzip xz-utils zstd perl \
+            gawk gperf zip unzip diffutils lzop make file g++-12 xfonts-utils xsltproc \
+            default-jre-headless python3 libc6-dev libncurses5-dev libjson-perl \
+            libxml-parser-perl libparse-yapp-perl rdfind golang-1.21-go git \
+            openssh-client rsync
+
+      - name: Checkout exact LibreELEC 12.2.1 source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --filter=blob:none --no-checkout "${LE_REPO}" LibreELEC.tv
+          git -C LibreELEC.tv fetch --depth=1 origin "${LE_REF}"
+          git -C LibreELEC.tv checkout --detach "${LE_COMMIT}"
+          test "$(git -C LibreELEC.tv rev-parse HEAD)" = "${LE_COMMIT}"
+          grep -q 'PKG_VERSION="21.3-Omega"' LibreELEC.tv/packages/mediacenter/kodi/package.mk
+
+      - name: Apply only source-download fixes proven by green JJS.009 builds
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          # Preserve the exact wireguard-tools source bytes accepted by the
+          # successful JJS.009 LibreELEC builds.
+          WG_PKG="LibreELEC.tv/packages/network/wireguard-tools/package.mk"
+          WG_OLD_SHA="6afe492647c3b0b2f68ab6df524e9e4290d03c34c3027e069e5bbc486949960e"
+          WG_NEW_SHA="e1b54c682c9734e81f8bd030eb00f2b33d3f09dfbd8397766d266c299c37e3fb"
+          WG_CURRENT_SHA="$(sed -n 's/^PKG_SHA256="\([^"]*\)"/\1/p' "$WG_PKG")"
+          test "$WG_CURRENT_SHA" = "$WG_OLD_SHA"
+          sed -i "s/^PKG_SHA256=.*/PKG_SHA256=\"$WG_NEW_SHA\"/" "$WG_PKG"
+
+          # Source URL corrections already proven by the green x86_64/RPi4 runs.
+          sed -i \
+            's#https://github.com/plougher/squashfs-tools/archive/${PKG_VERSION}.tar.gz#https://github.com/plougher/squashfs-tools/releases/download/${PKG_VERSION}/${PKG_NAME}-${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/sysutils/squashfs-tools/package.mk
+
+          sed -i \
+            's#https://gmplib.org/download/gmp/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://ftp.gnu.org/gnu/gmp/${PKG_NAME}-${PKG_VERSION}.tar.xz#' \
+            LibreELEC.tv/packages/devel/gmp/package.mk
+
+          sed -i \
+            's#http://repo.or.cz/rtmpdump.git/snapshot/${PKG_VERSION}.tar.gz#https://mirrors.mit.edu/macports/distfiles/rtmpdump/${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/multimedia/rtmpdump/package.mk
+
+          sed -i \
+            's#https://code.videolan.org/videolan/${PKG_NAME}/-/archive/${PKG_VERSION}/${PKG_NAME}-${PKG_VERSION}.tar.gz#https://mirrors.kodi.tv/build-deps/sources/${PKG_NAME}-${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/multimedia/libudfread/package.mk
+
+          sed -i \
+            's#https://www.freedesktop.org/software/fontconfig/release/${PKG_NAME}-${PKG_VERSION}.tar.gz#https://edf.amd.com/sswreleases/amd-edf/25.05/downloads/${PKG_NAME}-${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/x11/other/fontconfig/package.mk
+
+          sed -i \
+            's#http://www.freedesktop.org/software/pulseaudio/releases/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://na.edge.kernel.org/gentoo/distfiles/62/${PKG_NAME}-${PKG_VERSION}.tar.xz#' \
+            LibreELEC.tv/packages/audio/pulseaudio/package.mk
+
+          sed -i \
+            's#http://www.freedesktop.org/software/libevdev/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://mirrors.xmission.com/gentoo/distfiles/d4/${PKG_NAME}-${PKG_VERSION}.tar.xz#' \
+            LibreELEC.tv/packages/sysutils/libevdev/package.mk
+
+          sed -i \
+            's#http://linuxtv.org/downloads/v4l-utils/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://archive.ubuntu.com/ubuntu/pool/main/v/v4l-utils/v4l-utils_${PKG_VERSION}.orig.tar.xz#' \
+            LibreELEC.tv/packages/sysutils/v4l-utils/package.mk
+
+          sed -i \
+            's#https://github.com/alpharde/udevil/archive/${PKG_VERSION}.tar.gz#https://github.com/Arnie97/udevil-ng/archive/${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/sysutils/udevil/package.mk
+          udevil_version="$(sed -n 's/^PKG_VERSION="\([^"]*\)"/\1/p' LibreELEC.tv/packages/sysutils/udevil/package.mk)"
+          udevil_url="https://github.com/Arnie97/udevil-ng/archive/${udevil_version}.tar.gz"
+          udevil_tmp="$(mktemp)"
+          wget -q --timeout=30 --tries=3 -O "$udevil_tmp" "$udevil_url"
+          udevil_sha="$(sha256sum "$udevil_tmp" | awk '{print $1}')"
+          rm -f "$udevil_tmp"
+          sed -i "s/^PKG_SHA256=.*/PKG_SHA256=\"$udevil_sha\"/" \
+            LibreELEC.tv/packages/sysutils/udevil/package.mk
+
+          # GitHub runners could not reliably reach ftp.gnu.org/Savannah during
+          # JJS.009. Keep package versions and pinned checksums unchanged and use
+          # the exact mirror families that produced the successful builds.
+          find LibreELEC.tv/packages -type f -name package.mk -print0 | xargs -0 sed -i \
+            -e 's#https://ftpmirror.gnu.org/gnu/#https://mirrors.kernel.org/gnu/#g' \
+            -e 's#https://ftpmirror.gnu.org/#https://mirrors.kernel.org/gnu/#g' \
+            -e 's#https://ftp.gnu.org/pub/gnu/#https://mirrors.kernel.org/gnu/#g' \
+            -e 's#https://ftp.gnu.org/gnu/#https://mirrors.kernel.org/gnu/#g'
+
+          sed -i \
+            's#http://download.savannah.nongnu.org/releases/attr/${PKG_NAME}-${PKG_VERSION}.tar.gz#https://mirror.fi.ossplanet.net/nongnu/attr/${PKG_NAME}-${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/devel/attr/package.mk
+
+          sed -i \
+            's#https://download.savannah.gnu.org/releases/freetype/freetype-${PKG_VERSION}.tar.xz#https://downloads.sourceforge.net/project/freetype/freetype2/${PKG_VERSION}/freetype-${PKG_VERSION}.tar.xz#' \
+            LibreELEC.tv/packages/print/freetype/package.mk
+
+          if grep -R -E 'https://(ftp\.gnu\.org|ftpmirror\.gnu\.org)/' LibreELEC.tv/packages; then
+            echo "Unrewritten GNU source URL remains" >&2
+            exit 1
+          fi
+
+          git -C LibreELEC.tv diff --check
+          git -C LibreELEC.tv diff -- \
+            packages/network/wireguard-tools/package.mk \
+            packages/sysutils/squashfs-tools/package.mk \
+            packages/devel/gmp/package.mk \
+            packages/multimedia/rtmpdump/package.mk \
+            packages/multimedia/libudfread/package.mk \
+            packages/x11/other/fontconfig/package.mk \
+            packages/audio/pulseaudio/package.mk \
+            packages/sysutils/libevdev/package.mk \
+            packages/sysutils/v4l-utils/package.mk \
+            packages/sysutils/udevil/package.mk \
+            packages/devel/attr/package.mk \
+            packages/print/freetype/package.mk
+
+      - name: Download and verify Generic x86_64 and RPi4 aarch64 source sets
+        working-directory: LibreELEC.tv
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          preflight_target() {
+            local label="$1"
+            local project="$2"
+            local device="$3"
+            local arch="$4"
+            local plan="${RUNNER_TEMP}/libreelec-${label}-plan.json"
+            local pkgs="${RUNNER_TEMP}/libreelec-${label}-packages.txt"
+
+            export PROJECT="$project"
+            export DEVICE="$device"
+            export ARCH="$arch"
+
+            ./scripts/pkgjson | ./scripts/genbuildplan.py \
+              --with-json "$plan" --build image >/dev/null
+
+            python3 - "$plan" > "$pkgs" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as f:
+              plan = json.load(f)
+
+          seen = set()
+          for step in plan:
+              package = step["name"].split(":", 1)[0]
+              if package not in seen:
+                  seen.add(package)
+                  print(package)
+          PY
+
+            echo "${label}: $(wc -l < "$pkgs") packages"
+
+            failures=()
+            while IFS= read -r package; do
+              if ! ./scripts/get "$package"; then
+                failures+=("$package")
+              fi
+            done < "$pkgs"
+
+            if ((${#failures[@]})); then
+              printf '%s source download failed for %d package(s):\n' \
+                "$label" "${#failures[@]}" >&2
+              printf '  %s\n' "${failures[@]}" >&2
+              exit 1
+            fi
+          }
+
+          preflight_target generic-x86_64 Generic Generic x86_64
+          preflight_target rpi4-aarch64 RPi RPi4 aarch64
+
+          cp "${RUNNER_TEMP}/libreelec-generic-x86_64-packages.txt" \
+            "${GITHUB_WORKSPACE}/GENERIC-X86_64-PACKAGES.txt"
+          cp "${RUNNER_TEMP}/libreelec-rpi4-aarch64-packages.txt" \
+            "${GITHUB_WORKSPACE}/RPI4-AARCH64-PACKAGES.txt"
+
+          test -d sources
+          test -n "$(find sources -type f -print -quit)"
+          if find sources -type f -size 0 -print -quit | grep -q .; then
+            echo "Zero-byte source archive found" >&2
+            find sources -type f -size 0 -print >&2
+            exit 1
+          fi
+
+          echo "Source files: $(find sources -type f | wc -l)"
+          du -sh sources
+          df -h /
+
+      - name: Create immutable source manifest and archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p snapshot
+
+          (
+            cd LibreELEC.tv
+            find sources -type f -print0 | sort -z | \
+              while IFS= read -r -d '' file; do
+                sha="$(sha256sum "$file" | awk '{print $1}')"
+                size="$(stat -c '%s' "$file")"
+                printf '%s\t%s\t%s\n' "$sha" "$size" "$file"
+              done
+          ) > snapshot/SOURCE-MANIFEST.tsv
+
+          cp GENERIC-X86_64-PACKAGES.txt snapshot/
+          cp RPI4-AARCH64-PACKAGES.txt snapshot/
+
+          source_files="$(wc -l < snapshot/SOURCE-MANIFEST.tsv)"
+          generic_packages="$(wc -l < snapshot/GENERIC-X86_64-PACKAGES.txt)"
+          rpi_packages="$(wc -l < snapshot/RPI4-AARCH64-PACKAGES.txt)"
+          source_bytes="$(awk -F '\t' '{s += $2} END {printf "%.0f", s}' snapshot/SOURCE-MANIFEST.tsv)"
+
+          cat > snapshot/SNAPSHOT-INFO.txt <<EOF
+          Snapshot tag: ${SNAPSHOT_TAG}
+          Snapshot basename: ${SNAPSHOT_BASENAME}
+          LibreELEC ref: ${LE_REF}
+          LibreELEC commit: ${LE_COMMIT}
+          Kodi JJS source commit used by green JJS.009 builds: ${KODI_JJS}
+          Green Generic x86_64 wrapper commit: ${X86_GREEN_WRAPPER}
+          Green RPi4 aarch64 wrapper commit: ${RPI4_GREEN_WRAPPER}
+          Snapshot workflow commit: ${GITHUB_SHA}
+          Generic x86_64 package count: ${generic_packages}
+          RPi4 aarch64 package count: ${rpi_packages}
+          Unique source file count: ${source_files}
+          Total source bytes: ${source_bytes}
+          EOF
+
+          archive="snapshot/${SNAPSHOT_BASENAME}.tar.zst"
+          tar \
+            --sort=name \
+            --mtime='UTC 2026-10-07 00:00:00' \
+            --owner=0 --group=0 --numeric-owner \
+            -C LibreELEC.tv -cf - sources \
+            | zstd -T0 -10 -o "$archive"
+
+          sha256sum "$archive" > snapshot/ARCHIVE-SHA256.txt
+          zstd -t "$archive"
+          tar --use-compress-program=unzstd -tf "$archive" >/dev/null
+
+          split -b 1800M -d -a 2 \
+            "$archive" "snapshot/${SNAPSHOT_BASENAME}.tar.zst.part-"
+          rm -f "$archive"
+
+          (
+            cd snapshot
+            sha256sum "${SNAPSHOT_BASENAME}.tar.zst.part-"* \
+              SOURCE-MANIFEST.tsv \
+              GENERIC-X86_64-PACKAGES.txt \
+              RPI4-AARCH64-PACKAGES.txt \
+              SNAPSHOT-INFO.txt \
+              ARCHIVE-SHA256.txt \
+              > ASSET-SHA256SUMS.txt
+          )
+
+          cat > snapshot/REASSEMBLE.txt <<EOF
+          Reassemble:
+            cat ${SNAPSHOT_BASENAME}.tar.zst.part-* > ${SNAPSHOT_BASENAME}.tar.zst
+
+          Verify the reassembled archive:
+            sha256sum -c ARCHIVE-SHA256.txt
+            zstd -t ${SNAPSHOT_BASENAME}.tar.zst
+
+          Extract:
+            tar --use-compress-program=unzstd -xf ${SNAPSHOT_BASENAME}.tar.zst
+          EOF
+
+          echo "Snapshot files:"
+          ls -lh snapshot
+          df -h /
+
+      - name: Publish immutable GitHub source snapshot release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "${SNAPSHOT_TAG}" >/dev/null 2>&1; then
+            echo "Release ${SNAPSHOT_TAG} already exists; refusing to overwrite immutable snapshot." >&2
+            exit 1
+          fi
+
+          mapfile -t parts < <(find snapshot -maxdepth 1 -type f \
+            -name "${SNAPSHOT_BASENAME}.tar.zst.part-*" -print | sort)
+          test "${#parts[@]}" -gt 0
+
+          gh release create "${SNAPSHOT_TAG}" \
+            --target "${GITHUB_SHA}" \
+            --title "LibreELEC 12.2.1 JJS build sources v1" \
+            --notes "Immutable source snapshot used to make future LibreELEC 12.2.1 JJS builds independent of disappearing upstream download URLs. Covers Generic x86_64 and Raspberry Pi 4 aarch64. LibreELEC commit: ${LE_COMMIT}. Kodi JJS JJS.009 source reference: ${KODI_JJS}." \
+            "${parts[@]}" \
+            snapshot/SOURCE-MANIFEST.tsv \
+            snapshot/GENERIC-X86_64-PACKAGES.txt \
+            snapshot/RPI4-AARCH64-PACKAGES.txt \
+            snapshot/SNAPSHOT-INFO.txt \
+            snapshot/ARCHIVE-SHA256.txt \
+            snapshot/ASSET-SHA256SUMS.txt \
+            snapshot/REASSEMBLE.txt
+
+      - name: Upload snapshot as Actions artifact too
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.SNAPSHOT_BASENAME }}
+          path: snapshot/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 90
