@@ -323,6 +323,21 @@ CMusicThumbLoader::~CMusicThumbLoader()
   delete m_musicDatabase;
 }
 
+void CMusicThumbLoader::SetPrefetchItems(const CFileItemList& items)
+{
+  m_manualPrefetchItems.clear();
+  m_manualPrefetchItems.reserve(items.Size());
+  for (const auto& item : items)
+    m_manualPrefetchItems.emplace_back(item);
+}
+
+const std::vector<CFileItemPtr>& CMusicThumbLoader::GetPrefetchItems() const
+{
+  if (!m_vecItems.empty())
+    return m_vecItems;
+  return m_manualPrefetchItems;
+}
+
 void CMusicThumbLoader::OnLoaderStart()
 {
   m_musicDatabase->Open();
@@ -336,6 +351,7 @@ void CMusicThumbLoader::OnLoaderFinish()
 {
   m_musicDatabase->Close();
   m_albumArt.clear();
+  m_manualPrefetchItems.clear();
   m_cachedPathArt.clear();
   m_cachedPathArtPrefetched = false;
   CThumbLoader::OnLoaderFinish();
@@ -343,11 +359,12 @@ void CMusicThumbLoader::OnLoaderFinish()
 
 void CMusicThumbLoader::PrefetchLibraryArt()
 {
+  const auto& items = GetPrefetchItems();
   std::set<int> artistIds;
   std::set<int> albumIds;
   std::set<int> songIds;
 
-  for (const auto& item : m_vecItems)
+  for (const auto& item : items)
   {
     if (!item || item->m_bIsShareOrDrive || !item->HasMusicInfoTag() ||
         item->GetProperty("libraryartfilled").asBoolean())
@@ -374,7 +391,7 @@ void CMusicThumbLoader::PrefetchLibraryArt()
   const bool albumPrefetched = albumIds.empty() || database->GetAlbumArtBatch(albumIds, albumArt);
   const bool songPrefetched = songIds.empty() || database->GetSongArtBatch(songIds, songArt);
 
-  for (const auto& item : m_vecItems)
+  for (const auto& item : items)
   {
     if (!item || item->m_bIsShareOrDrive || !item->HasMusicInfoTag() ||
         item->GetProperty("libraryartfilled").asBoolean())
@@ -420,8 +437,9 @@ void CMusicThumbLoader::PrefetchCachedImages()
   m_cachedPathArt.clear();
   m_cachedPathArtPrefetched = false;
 
+  const auto& items = GetPrefetchItems();
   std::set<std::string> paths;
-  for (const auto& item : m_vecItems)
+  for (const auto& item : items)
   {
     if (!item || item->m_bIsShareOrDrive || item->GetPath().empty())
       continue;
