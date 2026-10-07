@@ -1,0 +1,225 @@
+name: Stage validated LibreELEC hydration workflow blobs
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - source-snapshot/libreelec-12.2.1-jjs-v1
+    paths:
+      - .github/workflows/stage-libreelec-source-hydration-blobs.yml
+
+permissions:
+  contents: write
+
+jobs:
+  stage:
+    name: Generate exact patched workflow blobs
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout snapshot branch shallow
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            .github/workflows/stage-libreelec-source-hydration-blobs.yml
+
+      - name: Generate and stage exact workflow files
+        shell: bash
+        env:
+          X86_BRANCH: build/21.3-jjs-009-libreelec
+          X86_EXPECTED: 7438292b3e5496119ca538dc221bffcc11e96c32
+          RPI_BRANCH: build/21.3-jjs-009-rpi4
+          RPI_EXPECTED: 61fb93823b5b06d09517d0ceb1a243b2ea60bca3
+          ACTION_SHA: 8aa9540b6d08955f1af7b4efbdafa30c2bbbe976
+          WORKFLOW: .github/workflows/jjs-libreelec-12.2.1-test.yml
+          STAGING_DIR: infra/source-hydration-staging
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch --depth=1 origin \
+            "+refs/heads/${X86_BRANCH}:refs/remotes/origin/${X86_BRANCH}" \
+            "+refs/heads/${RPI_BRANCH}:refs/remotes/origin/${RPI_BRANCH}"
+
+          test "$(git rev-parse "origin/${X86_BRANCH}")" = "${X86_EXPECTED}"
+          test "$(git rev-parse "origin/${RPI_BRANCH}")" = "${RPI_EXPECTED}"
+
+          git show "origin/${X86_BRANCH}:${WORKFLOW}" > "${RUNNER_TEMP}/x86.yml"
+          git show "origin/${RPI_BRANCH}:${WORKFLOW}" > "${RUNNER_TEMP}/rpi4.yml"
+
+          python3 - \
+            "${RUNNER_TEMP}/x86.yml" \
+            "libreelec-12.2.1-generic-x86_64" \
+            "libreelec-12.2.1-generic-x86_64-source-snapshot-v1" \
+            "${ACTION_SHA}" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          platform = sys.argv[2]
+          cache_key = sys.argv[3]
+          action_sha = sys.argv[4]
+          text = path.read_text(encoding="utf-8")
+
+          pattern = re.compile(
+              r"(?ms)^      - name: Cache LibreELEC source archives\n"
+              r".*?"
+              r"(?=^      - name: Preflight all LibreELEC source downloads\n)"
+          )
+          matches = list(pattern.finditer(text))
+          if len(matches) != 2:
+              raise SystemExit(f"Expected exactly two source-cache steps, found {len(matches)}")
+
+          old_key = f"key: {platform}-sources-v1"
+          old_prefix = f"{platform}-sources-"
+          for match in matches:
+              block = match.group(0)
+              if old_key not in block or old_prefix not in block:
+                  raise SystemExit("Source-cache step does not match expected green platform key")
+
+          if sum("if: steps.ccache_seed.outputs.cache-hit != 'true'" in m.group(0) for m in matches) != 1:
+              raise SystemExit("Expected exactly one prime-job source-cache step")
+
+          def make_block(prime):
+              lines = ["      - name: Cache frozen LibreELEC source snapshot"]
+              if prime:
+                  lines.append("        if: steps.ccache_seed.outputs.cache-hit != 'true'")
+              lines += [
+                  "        id: source_snapshot_cache",
+                  "        uses: actions/cache@v4",
+                  "        with:",
+                  "          path: LibreELEC.tv/sources",
+                  f"          key: {cache_key}",
+                  "",
+                  "      - name: Hydrate frozen LibreELEC source snapshot",
+              ]
+              if prime:
+                  lines.append("        if: steps.ccache_seed.outputs.cache-hit != 'true' && steps.source_snapshot_cache.outputs.cache-hit != 'true'")
+              else:
+                  lines.append("        if: steps.source_snapshot_cache.outputs.cache-hit != 'true'")
+              lines += [
+                  f"        uses: jjs-hamburg/kodi-jjs/.github/actions/hydrate-libreelec-12.2.1-sources@{action_sha}",
+                  "        with:",
+                  "          libreelec-dir: LibreELEC.tv",
+                  "",
+              ]
+              return "\n".join(lines)
+
+          text, count = pattern.subn(
+              lambda m: make_block("if: steps.ccache_seed.outputs.cache-hit != 'true'" in m.group(0)),
+              text,
+          )
+          if count != 2:
+              raise SystemExit(f"Expected two replacements, made {count}")
+          if text.count("hydrate-libreelec-12.2.1-sources@" + action_sha) != 2:
+              raise SystemExit("Pinned hydration action count mismatch")
+          if old_key in text or old_prefix in text:
+              raise SystemExit("Old source cache key/prefix remains")
+          if text.count(f"key: {cache_key}") != 2:
+              raise SystemExit("Frozen source cache key count mismatch")
+
+          path.write_text(text, encoding="utf-8")
+          PY
+
+          python3 - \
+            "${RUNNER_TEMP}/rpi4.yml" \
+            "libreelec-12.2.1-rpi4-aarch64" \
+            "libreelec-12.2.1-rpi4-aarch64-source-snapshot-v1" \
+            "${ACTION_SHA}" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          platform = sys.argv[2]
+          cache_key = sys.argv[3]
+          action_sha = sys.argv[4]
+          text = path.read_text(encoding="utf-8")
+
+          pattern = re.compile(
+              r"(?ms)^      - name: Cache LibreELEC source archives\n"
+              r".*?"
+              r"(?=^      - name: Preflight all LibreELEC source downloads\n)"
+          )
+          matches = list(pattern.finditer(text))
+          if len(matches) != 2:
+              raise SystemExit(f"Expected exactly two source-cache steps, found {len(matches)}")
+
+          old_key = f"key: {platform}-sources-v1"
+          old_prefix = f"{platform}-sources-"
+          for match in matches:
+              block = match.group(0)
+              if old_key not in block or old_prefix not in block:
+                  raise SystemExit("Source-cache step does not match expected green platform key")
+
+          if sum("if: steps.ccache_seed.outputs.cache-hit != 'true'" in m.group(0) for m in matches) != 1:
+              raise SystemExit("Expected exactly one prime-job source-cache step")
+
+          def make_block(prime):
+              lines = ["      - name: Cache frozen LibreELEC source snapshot"]
+              if prime:
+                  lines.append("        if: steps.ccache_seed.outputs.cache-hit != 'true'")
+              lines += [
+                  "        id: source_snapshot_cache",
+                  "        uses: actions/cache@v4",
+                  "        with:",
+                  "          path: LibreELEC.tv/sources",
+                  f"          key: {cache_key}",
+                  "",
+                  "      - name: Hydrate frozen LibreELEC source snapshot",
+              ]
+              if prime:
+                  lines.append("        if: steps.ccache_seed.outputs.cache-hit != 'true' && steps.source_snapshot_cache.outputs.cache-hit != 'true'")
+              else:
+                  lines.append("        if: steps.source_snapshot_cache.outputs.cache-hit != 'true'")
+              lines += [
+                  f"        uses: jjs-hamburg/kodi-jjs/.github/actions/hydrate-libreelec-12.2.1-sources@{action_sha}",
+                  "        with:",
+                  "          libreelec-dir: LibreELEC.tv",
+                  "",
+              ]
+              return "\n".join(lines)
+
+          text, count = pattern.subn(
+              lambda m: make_block("if: steps.ccache_seed.outputs.cache-hit != 'true'" in m.group(0)),
+              text,
+          )
+          if count != 2:
+              raise SystemExit(f"Expected two replacements, made {count}")
+          if text.count("hydrate-libreelec-12.2.1-sources@" + action_sha) != 2:
+              raise SystemExit("Pinned hydration action count mismatch")
+          if old_key in text or old_prefix in text:
+              raise SystemExit("Old source cache key/prefix remains")
+          if text.count(f"key: {cache_key}") != 2:
+              raise SystemExit("Frozen source cache key count mismatch")
+
+          path.write_text(text, encoding="utf-8")
+          PY
+
+          echo "x86_64 validated diff:"
+          git diff --no-index -- \
+            <(git show "origin/${X86_BRANCH}:${WORKFLOW}") \
+            "${RUNNER_TEMP}/x86.yml" || test $? -eq 1
+
+          echo "RPi4 validated diff:"
+          git diff --no-index -- \
+            <(git show "origin/${RPI_BRANCH}:${WORKFLOW}") \
+            "${RUNNER_TEMP}/rpi4.yml" || test $? -eq 1
+
+          mkdir -p "${STAGING_DIR}"
+          cp "${RUNNER_TEMP}/x86.yml" "${STAGING_DIR}/x86_64.yml"
+          cp "${RUNNER_TEMP}/rpi4.yml" "${STAGING_DIR}/rpi4.yml"
+
+          git add "${STAGING_DIR}/x86_64.yml" "${STAGING_DIR}/rpi4.yml"
+          git diff --cached --check
+          git commit -m "Stage validated LE hydration workflow blobs [skip ci]"
+          git push origin HEAD:refs/heads/source-snapshot/libreelec-12.2.1-jjs-v1
+
+          echo "x86 blob:  $(git rev-parse HEAD:${STAGING_DIR}/x86_64.yml)"
+          echo "RPi4 blob: $(git rev-parse HEAD:${STAGING_DIR}/rpi4.yml)"
