@@ -41,11 +41,14 @@ In addition to the gapless RAW / TrueHD / Atmos work, Kodi JJS carries a small s
 - **Destroyed Python `DialogProgressBG` can close unrelated progress displays – JJS.008**  
   Kodi's extended progress window is shared by multiple background-progress handles. Destroying one Python `DialogProgressBG` object closed that shared window instead of finishing only its own handle. Kodi JJS now marks only the owning handle finished, leaving other progress operations visible.
 
+- **Artist artwork refresh causes one database query per artist – JJS.009**  
+  Music artist views could reload artwork with a separate database query for every artist. With a central MariaDB/MySQL music database this made returning to an artist list visibly slow even though the artwork itself was already cached locally. Kodi JJS batch-loads the artist-to-artwork mappings with the artist query, eliminating the serial per-artist database round trips while preserving Kodi's existing fallback behaviour.
+
 ### Current release
 
-**Kodi JJS 21.3-JJS.008 – Android ARM64 / LibreELEC Generic x86_64 / LibreELEC Raspberry Pi 4**
+**Kodi JJS 21.3-JJS.009 – Android ARM64 / LibreELEC Generic x86_64 / LibreELEC Raspberry Pi 4**
 
-[Download the current release](https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.008)
+[Download the current release](https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.009)
 
 The Android build uses its own package name, **`org.jjs.kodi`**, so it can be installed **in parallel with standard Kodi**.
 
@@ -72,7 +75,7 @@ Because Kodi JJS uses a separate Android package, the existing Kodi installation
 
 ### LibreELEC
 
-JJS.008 provides LibreELEC 12.2.1 builds for **Generic x86_64** and **Raspberry Pi 4 (aarch64)**.
+JJS.009 provides LibreELEC 12.2.1 builds for **Generic x86_64** and **Raspberry Pi 4 (aarch64)**.
 
 Before installing a JJS LibreELEC TAR:
 
@@ -143,7 +146,7 @@ This is what allows Kodi JJS and official Kodi (`org.xbmc.kodi`) to coexist on t
 
 The JJS audio changes are in Kodi core and are not specific to NVIDIA Shield hardware.
 
-Current development branch: **`21.3-Omega-jjs`**
+JJS.009 source commit: **`442f3ecace492765b2014b1249ec97d81c180c59`**
 
 For a more detailed technical description, see **[README.JJS.md](README.JJS.md)**.
 
