@@ -1,0 +1,84 @@
+name: Hydrate LibreELEC 12.2.1 frozen sources
+description: Restore and verify the immutable LibreELEC 12.2.1 JJS source snapshot into an existing LibreELEC.tv checkout.
+
+inputs:
+  libreelec-dir:
+    description: Path to the LibreELEC.tv checkout
+    required: false
+    default: LibreELEC.tv
+
+runs:
+  using: composite
+  steps:
+    - name: Download, verify and hydrate frozen LibreELEC sources
+      shell: bash
+      env:
+        LE_DIR: ${{ inputs.libreelec-dir }}
+        SNAPSHOT_TAG: libreelec-12.2.1-jjs-sources-v1
+        SNAPSHOT_NAME: LibreELEC-12.2.1-JJS-sources-v1
+      run: |
+        set -euo pipefail
+
+        test -d "${LE_DIR}"
+        command -v wget >/dev/null
+        command -v zstd >/dev/null
+        command -v unzstd >/dev/null
+        command -v sha256sum >/dev/null
+
+        base="https://github.com/jjs-hamburg/kodi-jjs/releases/download/${SNAPSHOT_TAG}"
+        temp="${RUNNER_TEMP}/libreelec-source-snapshot-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        rm -rf "$temp"
+        mkdir -p "$temp"
+
+        assets="
+        ${SNAPSHOT_NAME}.tar.zst.part-00
+        ${SNAPSHOT_NAME}.tar.zst.part-01
+        SOURCE-MANIFEST.tsv
+        GENERIC-X86_64-PACKAGES.txt
+        RPI4-AARCH64-PACKAGES.txt
+        SNAPSHOT-INFO.txt
+        ARCHIVE-SHA256.txt
+        ASSET-SHA256SUMS.txt
+        REASSEMBLE.txt
+        "
+
+        for asset in $assets; do
+          wget -q --timeout=60 --tries=5 -O "$temp/$asset" "$base/$asset"
+        done
+
+        (
+          cd "$temp"
+          sha256sum -c ASSET-SHA256SUMS.txt
+        )
+
+        archive="$temp/${SNAPSHOT_NAME}.tar.zst"
+        cat "$temp/${SNAPSHOT_NAME}.tar.zst.part-"* > "$archive"
+
+        expected_archive_sha="$(awk 'NR == 1 {print $1}' "$temp/ARCHIVE-SHA256.txt")"
+        actual_archive_sha="$(sha256sum "$archive" | awk '{print $1}')"
+        test -n "$expected_archive_sha"
+        test "$actual_archive_sha" = "$expected_archive_sha"
+        zstd -t "$archive"
+
+        rm -rf "${LE_DIR}/sources"
+        tar --use-compress-program=unzstd -xf "$archive" -C "${LE_DIR}"
+        test -d "${LE_DIR}/sources"
+
+        total="$(wc -l < "$temp/SOURCE-MANIFEST.tsv" | tr -d ' ')"
+        count=0
+        tab="$(printf '\t')"
+
+        while IFS="$tab" read -r expected_sha expected_size path; do
+          count=$((count + 1))
+          file="${LE_DIR}/${path}"
+          test -f "$file"
+          test "$(stat -c '%s' "$file")" = "$expected_size"
+          test "$(sha256sum "$file" | awk '{print $1}')" = "$expected_sha"
+        done < "$temp/SOURCE-MANIFEST.tsv"
+
+        test "$count" = "$total"
+        test "$total" = "720"
+        test "$(find "${LE_DIR}/sources" -type f | wc -l | tr -d ' ')" = "$total"
+
+        rm -rf "$temp"
+        echo "Hydrated and verified ${total} frozen LibreELEC source files."
