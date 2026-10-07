@@ -17,7 +17,7 @@ jobs:
     env:
       KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
       KODI_REF: test/jjs010-music-nav-art-batch
-      EXPECTED_KODI_COMMIT: c2df9a8a0f26a2b35cdefc32d3f9a2c8bacb397b
+      EXPECTED_KODI_COMMIT: 28a14a78551a621c4ba36fffb4c4d37fb4b7b866
       EXPECTED_INTERNAL_APP_NAME: Kodi
       SOURCE_DISPLAY_NAME: Kodi JJS
       SOURCE_PACKAGE: org.jjs.kodi
