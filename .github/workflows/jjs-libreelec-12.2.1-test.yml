@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - build/21.3-jjs-009-rpi4
+      - build/21.3-jjs-010-rpi4
 
 permissions:
   contents: read
@@ -265,7 +265,7 @@ jobs:
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
 
-          sed -i 's/LIBREELEC_VERSION="devel"/LIBREELEC_VERSION="12.2.1-JJS.009"/' \
+          sed -i 's/LIBREELEC_VERSION="devel"/LIBREELEC_VERSION="12.2.1-JJS.010"/' \
             LibreELEC.tv/distributions/LibreELEC/version
 
       - name: Cache frozen LibreELEC source snapshot
@@ -372,7 +372,7 @@ jobs:
           key: libreelec-12.2.1-rpi4-aarch64-ccache-ready-v1
 
   build:
-    name: Build LibreELEC JJS.009
+    name: Build LibreELEC JJS.010
     needs: prime_ccache
     runs-on: ubuntu-22.04
     timeout-minutes: 355
@@ -383,7 +383,7 @@ jobs:
       LE_COMMIT: 6209f5a3b067c45fbf527286dd84ee483294b46a
       KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
       KODI_BASE: a3a448d26b8d560a65655dab2cd122994dc4e146
-      KODI_JJS: 442f3ecace492765b2014b1249ec97d81c180c59
+      KODI_JJS: f5cbef54a2d04807e35441b9fe84eaacbb4b3b6c
       PROJECT: RPi
       DEVICE: RPi4
       ARCH: aarch64
@@ -736,6 +736,9 @@ jobs:
             xbmc/music/windows/GUIWindowMusicBase.cpp \
             xbmc/music/infoscanner/MusicInfoScanner.cpp \
             xbmc/music/MusicDatabase.cpp \
+            xbmc/music/MusicInfoLoader.cpp \
+            xbmc/music/MusicThumbLoader.cpp \
+            xbmc/music/MusicThumbLoader.h \
             xbmc/interfaces/legacy/Dialog.cpp \
             media/splash.jpg \
             xbmc/cores/AudioEngine/Engines/ActiveAE/ActiveAESink.cpp \
@@ -766,7 +769,7 @@ jobs:
           ID_PATCH="$GITHUB_WORKSPACE/kodi-jjs-identity-libreelec.patch"
           git -C kodi-jjs show "${KODI_BASE}:version.txt" > "$ID_BASE"
           cp "$ID_BASE" "$ID_JJS"
-          sed -i -e 's/^VERSION_TAG.*/VERSION_TAG JJS.009/' "$ID_JJS"
+          sed -i -e 's/^VERSION_TAG.*/VERSION_TAG JJS.010/' "$ID_JJS"
           diff -u --label a/version.txt --label b/version.txt "$ID_BASE" "$ID_JJS" > "$ID_PATCH" || test $? -eq 1
           git -C kodi-jjs diff --binary --no-ext-diff "${KODI_BASE}" "${KODI_JJS}" -- \
             xbmc/windows/GUIWindowSystemInfo.cpp >> "$ID_PATCH"
@@ -780,6 +783,9 @@ jobs:
             xbmc/music/windows/GUIWindowMusicBase.cpp \
             xbmc/music/infoscanner/MusicInfoScanner.cpp \
             xbmc/music/MusicDatabase.cpp \
+            xbmc/music/MusicInfoLoader.cpp \
+            xbmc/music/MusicThumbLoader.cpp \
+            xbmc/music/MusicThumbLoader.h \
             xbmc/interfaces/legacy/Dialog.cpp \
             media/splash.jpg \
             xbmc/cores/AudioEngine/Utils/PackerMAT.cpp \
@@ -798,7 +804,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          sed -i 's/LIBREELEC_VERSION="devel"/LIBREELEC_VERSION="12.2.1-JJS.009"/' \
+          sed -i 's/LIBREELEC_VERSION="devel"/LIBREELEC_VERSION="12.2.1-JJS.010"/' \
             LibreELEC.tv/distributions/LibreELEC/version
           grep LIBREELEC_VERSION LibreELEC.tv/distributions/LibreELEC/version
 
@@ -871,7 +877,7 @@ jobs:
         if: steps.build_image.outputs.complete != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: LibreELEC-JJS.009-build-diagnostics
+          name: LibreELEC-JJS.010-build-diagnostics
           path: libreelec-build-diagnostics
           if-no-files-found: error
           retention-days: 14
@@ -880,7 +886,7 @@ jobs:
         if: steps.build_image.outputs.complete == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: LibreELEC-RPi4-aarch64-12.2.1-JJS.009
+          name: LibreELEC-RPi4-aarch64-12.2.1-JJS.010
           if-no-files-found: error
           retention-days: 14
           path: |
