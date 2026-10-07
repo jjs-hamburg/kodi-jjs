@@ -1,0 +1,211 @@
+name: Publish Kodi JJS 21.3-JJS.009
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/publish-jjs-009.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_RUN_ID: "37504373667"
+      ANDROID_ARTIFACT_ID: "11434749279"
+      ANDROID_HEAD_SHA: "b07b936e5a758ccc75689fa1e0fb19ee8ffcbdae"
+      ANDROID_BRANCH: "build/21.3-jjs-009-android"
+      ANDROID_SOURCE_COMMIT: "442f3ecace492765b2014b1249ec97d81c180c59"
+      ANDROID_ARTIFACT_NAME: "Kodi-JJS-21.3-JJS.009-arm64"
+
+      X64_RUN_ID: "37531480760"
+      X64_ARTIFACT_ID: "11463020125"
+      X64_HEAD_SHA: "7438292b3e5496119ca538dc221bffcc11e96c32"
+      X64_BRANCH: "build/21.3-jjs-009-libreelec"
+      X64_ARTIFACT_NAME: "LibreELEC-Generic-x86_64-12.2.1-JJS.009"
+
+      RPI4_RUN_ID: "37531522267"
+      RPI4_ARTIFACT_ID: "11455052688"
+      RPI4_HEAD_SHA: "61fb93823b5b06d09517d0ceb1a243b2ea60bca3"
+      RPI4_BRANCH: "build/21.3-jjs-009-rpi4"
+      RPI4_ARTIFACT_NAME: "LibreELEC-RPi4-aarch64-12.2.1-JJS.009"
+
+      RELEASE_TARGET: "442f3ecace492765b2014b1249ec97d81c180c59"
+      RELEASE_TAG: "v21.3-JJS.009"
+      RELEASE_TITLE: "Kodi JJS 21.3-JJS.009 – Android ARM64 / LibreELEC x86_64 / Raspberry Pi 4"
+
+    steps:
+      - name: Verify exact green build runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          check_run() {
+            local run_id="$1"
+            local expected_sha="$2"
+            local expected_branch="$3"
+            local label="$4"
+
+            local status conclusion head_sha head_branch
+            status="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
+            conclusion="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion // ""')"
+            head_sha="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.head_sha')"
+            head_branch="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.head_branch')"
+
+            test "$status" = "completed"
+            test "$conclusion" = "success"
+            test "$head_sha" = "$expected_sha"
+            test "$head_branch" = "$expected_branch"
+            echo "$label: green run $run_id ($head_sha)"
+          }
+
+          check_run "$ANDROID_RUN_ID" "$ANDROID_HEAD_SHA" "$ANDROID_BRANCH" "Android ARM64"
+          check_run "$X64_RUN_ID" "$X64_HEAD_SHA" "$X64_BRANCH" "LibreELEC x86_64"
+          check_run "$RPI4_RUN_ID" "$RPI4_HEAD_SHA" "$RPI4_BRANCH" "LibreELEC RPi4"
+
+      - name: Verify exact artifact identities
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          check_artifact() {
+            local artifact_id="$1"
+            local expected_name="$2"
+            local expected_run="$3"
+            local name run_id expired
+
+            name="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}" --jq '.name')"
+            run_id="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}" --jq '.workflow_run.id')"
+            expired="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}" --jq '.expired')"
+
+            test "$name" = "$expected_name"
+            test "$run_id" = "$expected_run"
+            test "$expired" = "false"
+            echo "$expected_name: artifact $artifact_id verified"
+          }
+
+          check_artifact "$ANDROID_ARTIFACT_ID" "$ANDROID_ARTIFACT_NAME" "$ANDROID_RUN_ID"
+          check_artifact "$X64_ARTIFACT_ID" "$X64_ARTIFACT_NAME" "$X64_RUN_ID"
+          check_artifact "$RPI4_ARTIFACT_ID" "$RPI4_ARTIFACT_NAME" "$RPI4_RUN_ID"
+
+      - name: Download exact Android artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ANDROID_ARTIFACT_ID}/zip" > android-artifact.zip
+          mkdir android
+          unzip -q android-artifact.zip -d android
+          find android -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: Download exact LibreELEC x86_64 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${X64_ARTIFACT_ID}/zip" > x64-artifact.zip
+          mkdir x64
+          unzip -q x64-artifact.zip -d x64
+          find x64 -type f -printf '%P\n' | sort
+
+      - name: Download exact LibreELEC Raspberry Pi 4 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${RPI4_ARTIFACT_ID}/zip" > rpi4-artifact.zip
+          mkdir rpi4
+          unzip -q rpi4-artifact.zip -d rpi4
+          find rpi4 -type f -printf '%P\n' | sort
+
+      - name: Verify release payload
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f android/BUILD-INFO.txt
+          test -f android/SHA256SUMS.txt
+          test -f android/AAPT-BADGING.txt
+          test -f android/APKSIGNER-VERIFY.txt
+          APK="$(find android -maxdepth 1 -type f -name 'Kodi-JJS-21.3-JJS.009-*-arm64.apk' -print -quit)"
+          test -n "$APK"
+          grep -Fq "Kodi source commit: ${ANDROID_SOURCE_COMMIT}" android/BUILD-INFO.txt
+          grep -Fq "Version: 21.3-JJS.009 (2103000)" android/BUILD-INFO.txt
+          grep -Fq "Android display name: Kodi JJS" android/BUILD-INFO.txt
+          grep -Fq "Android package: org.jjs.kodi" android/BUILD-INFO.txt
+          EXPECTED_APK_SHA256="$(awk '{print $1; exit}' android/SHA256SUMS.txt)"
+          ACTUAL_APK_SHA256="$(sha256sum "$APK" | awk '{print $1}')"
+          test "$ACTUAL_APK_SHA256" = "$EXPECTED_APK_SHA256"
+
+          for dir in x64 rpi4; do
+            test -f "$dir/kodi-jjs-gapless-libreelec.patch"
+            test -f "$dir/kodi-jjs-identity-libreelec.patch"
+            grep -Fq 'xbmc/music/MusicDatabase.cpp' "$dir/kodi-jjs-gapless-libreelec.patch"
+            grep -Fq 'VERSION_TAG JJS.009' "$dir/kodi-jjs-identity-libreelec.patch"
+          done
+
+          test -n "$(find x64 -type f -name 'LibreELEC-Generic.x86_64-12.2.1-JJS.009.tar' -print -quit)"
+          test -n "$(find x64 -type f -name 'LibreELEC-Generic.x86_64-12.2.1-JJS.009.img.gz' -print -quit)"
+          test -n "$(find rpi4 -type f -name 'LibreELEC-RPi4.aarch64-12.2.1-JJS.009.tar' -print -quit)"
+          test -n "$(find rpi4 -type f -name 'LibreELEC-RPi4.aarch64-12.2.1-JJS.009.img.gz' -print -quit)"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > RELEASE-NOTES.md <<'EOF'
+          Kodi JJS 21.3-JJS.009.
+
+          Confirmed platforms:
+          - Android ARM64 / arm64-v8a (tested on NVIDIA Shield)
+          - LibreELEC 12.2.1 Generic x86_64
+          - LibreELEC 12.2.1 Raspberry Pi 4 / aarch64
+
+          JJS.009 change:
+          - Artist artwork mappings in music views are batch-loaded instead of issuing one database query per artist. This removes the visible per-item artwork refresh delay, especially with a central MariaDB/MySQL music database.
+
+          All JJS.008 and earlier fixes are retained, including the seamless RAW / TrueHD / Dolby Atmos handover, MAT state preservation, RAW EOF backlog handling, music-library cancellation fix, DialogProgressBG lifecycle fix, Kodi JJS splash and LibreELEC update-safety defaults.
+          EOF
+
+          mapfile -t ANDROID_FILES < <(find android -maxdepth 1 -type f \( -name '*.apk' -o -name '*.txt' \) -print | sort)
+          mapfile -t X64_FILES < <(find x64 -type f \( -name '*.tar' -o -name '*.img.gz' -o -name '*.sha256' \) -print | sort)
+          mapfile -t RPI4_FILES < <(find rpi4 -type f \( -name '*.tar' -o -name '*.img.gz' -o -name '*.sha256' \) -print | sort)
+
+          RELEASE_FILES=(
+            "${ANDROID_FILES[@]}"
+            "${X64_FILES[@]}"
+            "${RPI4_FILES[@]}"
+            x64/kodi-jjs-gapless-libreelec.patch
+            x64/kodi-jjs-identity-libreelec.patch
+          )
+
+          test "${#ANDROID_FILES[@]}" -gt 0
+          test "${#X64_FILES[@]}" -gt 0
+          test "${#RPI4_FILES[@]}" -gt 0
+
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" "${RELEASE_FILES[@]}" --clobber
+            gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+              --title "${RELEASE_TITLE}" --notes-file RELEASE-NOTES.md
+          else
+            gh release create "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+              --target "${RELEASE_TARGET}" \
+              --title "${RELEASE_TITLE}" \
+              --notes-file RELEASE-NOTES.md \
+              "${RELEASE_FILES[@]}"
+          fi
