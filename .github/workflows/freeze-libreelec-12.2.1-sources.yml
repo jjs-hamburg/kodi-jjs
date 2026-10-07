@@ -1,0 +1,333 @@
+name: Freeze LibreELEC 12.2.1 build sources
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/freeze-libreelec-12.2.1-sources.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  freeze:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+
+    env:
+      LE_REPO: https://github.com/LibreELEC/LibreELEC.tv.git
+      LE_REF: 12.2.1
+      LE_COMMIT: 6209f5a3b067c45fbf527286dd84ee483294b46a
+      KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
+      KODI_JJS_COMMIT: 442f3ecace492765b2014b1249ec97d81c180c59
+      ANDROID_WRAPPER_COMMIT: b07b936e5a758ccc75689fa1e0fb19ee8ffcbdae
+      X86_WRAPPER_COMMIT: 7438292b3e5496119ca538dc221bffcc11e96c32
+      RPI4_WRAPPER_COMMIT: 61fb93823b5b06d09517d0ceb1a243b2ea60bca3
+      ANDROID_RUN_ID: "37504373667"
+      X86_RUN_ID: "37531480760"
+      RPI4_RUN_ID: "37531522267"
+      FREEZE_TAG: libreelec-12.2.1-jjs-sources-v1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Free runner disk space
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup || true
+          sudo apt-get clean
+          df -h /
+
+      - name: Install source-freeze tools
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            wget curl git python3 zstd ca-certificates
+
+      - name: Checkout exact LibreELEC 12.2.1 source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --filter=blob:none --no-checkout "${LE_REPO}" LibreELEC.tv
+          git -C LibreELEC.tv fetch --depth=1 origin "${LE_REF}"
+          git -C LibreELEC.tv checkout --detach "${LE_COMMIT}"
+          test "$(git -C LibreELEC.tv rev-parse HEAD)" = "${LE_COMMIT}"
+          grep -q 'PKG_VERSION="21.3-Omega"' LibreELEC.tv/packages/mediacenter/kodi/package.mk
+
+      - name: Apply exact source-download fixes from green JJS.009 builds
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          WG_PKG="LibreELEC.tv/packages/network/wireguard-tools/package.mk"
+          WG_OLD_SHA="6afe492647c3b0b2f68ab6df524e9e4290d03c34c3027e069e5bbc486949960e"
+          WG_NEW_SHA="e1b54c682c9734e81f8bd030eb00f2b33d3f09dfbd8397766d266c299c37e3fb"
+          WG_CURRENT_SHA="$(sed -n 's/^PKG_SHA256="\([^"]*\)"/\1/p' "$WG_PKG")"
+          test "$WG_CURRENT_SHA" = "$WG_OLD_SHA"
+          sed -i "s/^PKG_SHA256=.*/PKG_SHA256=\"$WG_NEW_SHA\"/" "$WG_PKG"
+
+          find LibreELEC.tv/packages -type f -name package.mk -print0 | xargs -0 sed -i \
+            -e 's#https://ftpmirror.gnu.org/gnu/#https://mirrors.kernel.org/gnu/#g' \
+            -e 's#https://ftpmirror.gnu.org/#https://mirrors.kernel.org/gnu/#g' \
+            -e 's#https://ftp.gnu.org/pub/gnu/#https://mirrors.kernel.org/gnu/#g' \
+            -e 's#https://ftp.gnu.org/gnu/#https://mirrors.kernel.org/gnu/#g'
+
+          sed -i \
+            's#https://github.com/plougher/squashfs-tools/archive/${PKG_VERSION}.tar.gz#https://github.com/plougher/squashfs-tools/releases/download/${PKG_VERSION}/${PKG_NAME}-${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/sysutils/squashfs-tools/package.mk
+
+          sed -i \
+            's#https://gmplib.org/download/gmp/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://mirrors.kernel.org/gnu/gmp/${PKG_NAME}-${PKG_VERSION}.tar.xz#' \
+            LibreELEC.tv/packages/devel/gmp/package.mk
+
+          sed -i \
+            's#http://repo.or.cz/rtmpdump.git/snapshot/${PKG_VERSION}.tar.gz#https://mirrors.mit.edu/macports/distfiles/rtmpdump/${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/multimedia/rtmpdump/package.mk
+
+          sed -i \
+            's#https://code.videolan.org/videolan/${PKG_NAME}/-/archive/${PKG_VERSION}/${PKG_NAME}-${PKG_VERSION}.tar.gz#https://mirrors.kodi.tv/build-deps/sources/${PKG_NAME}-${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/multimedia/libudfread/package.mk
+
+          sed -i \
+            's#https://www.freedesktop.org/software/fontconfig/release/${PKG_NAME}-${PKG_VERSION}.tar.gz#https://edf.amd.com/sswreleases/amd-edf/25.05/downloads/${PKG_NAME}-${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/x11/other/fontconfig/package.mk
+
+          sed -i \
+            's#http://www.freedesktop.org/software/pulseaudio/releases/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://na.edge.kernel.org/gentoo/distfiles/62/${PKG_NAME}-${PKG_VERSION}.tar.xz#' \
+            LibreELEC.tv/packages/audio/pulseaudio/package.mk
+
+          sed -i \
+            's#http://www.freedesktop.org/software/libevdev/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://mirrors.xmission.com/gentoo/distfiles/d4/${PKG_NAME}-${PKG_VERSION}.tar.xz#' \
+            LibreELEC.tv/packages/sysutils/libevdev/package.mk
+
+          sed -i \
+            's#http://linuxtv.org/downloads/v4l-utils/${PKG_NAME}-${PKG_VERSION}.tar.xz#https://archive.ubuntu.com/ubuntu/pool/main/v/v4l-utils/v4l-utils_${PKG_VERSION}.orig.tar.xz#' \
+            LibreELEC.tv/packages/sysutils/v4l-utils/package.mk
+
+          sed -i \
+            's#https://github.com/alpharde/udevil/archive/${PKG_VERSION}.tar.gz#https://github.com/Arnie97/udevil-ng/archive/${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/sysutils/udevil/package.mk
+          udevil_version="$(sed -n 's/^PKG_VERSION="\([^"]*\)"/\1/p' LibreELEC.tv/packages/sysutils/udevil/package.mk)"
+          udevil_url="https://github.com/Arnie97/udevil-ng/archive/${udevil_version}.tar.gz"
+          udevil_tmp="$(mktemp)"
+          wget -q --timeout=30 --tries=3 -O "$udevil_tmp" "$udevil_url"
+          udevil_sha="$(sha256sum "$udevil_tmp" | awk '{print $1}')"
+          rm -f "$udevil_tmp"
+          sed -i "s/^PKG_SHA256=.*/PKG_SHA256=\"$udevil_sha\"/" \
+            LibreELEC.tv/packages/sysutils/udevil/package.mk
+
+          sed -i \
+            's#http://download.savannah.nongnu.org/releases/attr/${PKG_NAME}-${PKG_VERSION}.tar.gz#https://mirror.fi.ossplanet.net/nongnu/attr/${PKG_NAME}-${PKG_VERSION}.tar.gz#' \
+            LibreELEC.tv/packages/devel/attr/package.mk
+
+          sed -i \
+            's#https://download.savannah.gnu.org/releases/freetype/freetype-${PKG_VERSION}.tar.xz#https://downloads.sourceforge.net/project/freetype/freetype2/${PKG_VERSION}/freetype-${PKG_VERSION}.tar.xz#' \
+            LibreELEC.tv/packages/print/freetype/package.mk
+
+          if grep -R -E 'ftpmirror\.gnu\.org|https://ftp\.gnu\.org/(pub/)?gnu/' LibreELEC.tv/packages; then
+            echo "An unstable GNU source URL remains after rewrite." >&2
+            exit 1
+          fi
+
+      - name: Generate Generic x86_64 source plan and download every source
+        working-directory: LibreELEC.tv
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PROJECT=Generic DEVICE=Generic ARCH=x86_64
+          PLAN="${RUNNER_TEMP}/x86-image-plan.json"
+          PKGS="${GITHUB_WORKSPACE}/freeze-x86-packages.txt"
+          ./scripts/pkgjson | ./scripts/genbuildplan.py --with-json "$PLAN" --build image >/dev/null
+          python3 - "$PLAN" > "$PKGS" <<'PY'
+          import json, sys
+          with open(sys.argv[1], encoding="utf-8") as f:
+              plan = json.load(f)
+          seen = set()
+          for step in plan:
+              pkg = step["name"].split(":", 1)[0]
+              if pkg not in seen:
+                  seen.add(pkg)
+                  print(pkg)
+          PY
+          echo "Generic x86_64 packages: $(wc -l < "$PKGS")"
+          failures=()
+          while IFS= read -r package; do
+            ./scripts/get "$package" || failures+=("$package")
+          done < "$PKGS"
+          if ((${#failures[@]})); then
+            printf 'x86_64 source download failed for %d package(s):\n' "${#failures[@]}" >&2
+            printf '  %s\n' "${failures[@]}" >&2
+            exit 1
+          fi
+
+      - name: Generate Raspberry Pi 4 source plan and download every additional source
+        working-directory: LibreELEC.tv
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PROJECT=RPi DEVICE=RPi4 ARCH=aarch64
+          PLAN="${RUNNER_TEMP}/rpi4-image-plan.json"
+          PKGS="${GITHUB_WORKSPACE}/freeze-rpi4-packages.txt"
+          ./scripts/pkgjson | ./scripts/genbuildplan.py --with-json "$PLAN" --build image >/dev/null
+          python3 - "$PLAN" > "$PKGS" <<'PY'
+          import json, sys
+          with open(sys.argv[1], encoding="utf-8") as f:
+              plan = json.load(f)
+          seen = set()
+          for step in plan:
+              pkg = step["name"].split(":", 1)[0]
+              if pkg not in seen:
+                  seen.add(pkg)
+                  print(pkg)
+          PY
+          echo "RPi4 packages: $(wc -l < "$PKGS")"
+          failures=()
+          while IFS= read -r package; do
+            ./scripts/get "$package" || failures+=("$package")
+          done < "$PKGS"
+          if ((${#failures[@]})); then
+            printf 'RPi4 source download failed for %d package(s):\n' "${#failures[@]}" >&2
+            printf '  %s\n' "${failures[@]}" >&2
+            exit 1
+          fi
+
+      - name: Capture exact green build wrappers and JJS source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p freeze/wrappers
+          curl --fail --location --retry 5 \
+            "https://raw.githubusercontent.com/jjs-hamburg/kodi-jjs/${ANDROID_WRAPPER_COMMIT}/.github/workflows/jjs-android-21.3.yml" \
+            -o freeze/wrappers/jjs-android-21.3.yml
+          curl --fail --location --retry 5 \
+            "https://raw.githubusercontent.com/jjs-hamburg/kodi-jjs/${X86_WRAPPER_COMMIT}/.github/workflows/jjs-libreelec-12.2.1-test.yml" \
+            -o freeze/wrappers/jjs-libreelec-12.2.1-x86_64.yml
+          curl --fail --location --retry 5 \
+            "https://raw.githubusercontent.com/jjs-hamburg/kodi-jjs/${RPI4_WRAPPER_COMMIT}/.github/workflows/jjs-libreelec-12.2.1-test.yml" \
+            -o freeze/wrappers/jjs-libreelec-12.2.1-rpi4.yml
+
+          git clone --filter=blob:none --no-checkout "${KODI_REPO}" kodi-jjs-source
+          git -C kodi-jjs-source fetch --depth=1 origin "${KODI_JJS_COMMIT}"
+          git -C kodi-jjs-source archive --format=tar FETCH_HEAD | zstd -T0 -6 \
+            -o freeze/kodi-jjs-${KODI_JJS_COMMIT}.tar.zst
+
+      - name: Build immutable source freeze payload
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p freeze
+
+          git -C LibreELEC.tv diff --binary > freeze/libreelec-12.2.1-source-download-fixes.patch
+
+          cp freeze-x86-packages.txt freeze/x86_64-packages.txt
+          cp freeze-rpi4-packages.txt freeze/rpi4-packages.txt
+
+          (
+            cd LibreELEC.tv/sources
+            find . -type f -print0 | sort -z | xargs -0 sha256sum
+          ) > freeze/SOURCE-MANIFEST.sha256
+
+          (
+            cd LibreELEC.tv/sources
+            find . -type f -printf '%s\t%p\n' | sort -k2
+          ) > freeze/SOURCE-SIZES.tsv
+
+          cat > freeze/SOURCE-FREEZE.txt <<EOF
+          Kodi JJS / LibreELEC 12.2.1 source freeze v1
+          =================================================
+          Generated UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+
+          Release: v21.3-JJS.009
+          Kodi JJS source commit: ${KODI_JJS_COMMIT}
+          LibreELEC source commit: ${LE_COMMIT}
+
+          Exact green wrapper commits:
+          Android ARM64: ${ANDROID_WRAPPER_COMMIT} (run ${ANDROID_RUN_ID})
+          LibreELEC Generic x86_64: ${X86_WRAPPER_COMMIT} (run ${X86_RUN_ID})
+          LibreELEC RPi4 aarch64: ${RPI4_WRAPPER_COMMIT} (run ${RPI4_RUN_ID})
+
+          This freeze contains the union of every source archive required by the
+          LibreELEC 12.2.1 Generic x86_64 and RPi4 image build plans, plus the
+          prepared LibreELEC source tree, the exact Kodi JJS source tree, the
+          exact green build wrapper workflows and SHA256 manifests.
+          EOF
+
+          cat > freeze/RESTORE.txt <<'EOF'
+          Reconstruct the source archive:
+            cat libreelec-12.2.1-sources-x86_64-rpi4.tar.zst.part-* > libreelec-12.2.1-sources-x86_64-rpi4.tar.zst
+
+          Extract it:
+            zstd -dc libreelec-12.2.1-sources-x86_64-rpi4.tar.zst | tar -xf -
+
+          The archive restores a sources/ directory suitable for placement at:
+            LibreELEC.tv/sources/
+
+          Verify the restored source files from inside that directory with:
+            sha256sum -c ../SOURCE-MANIFEST.sha256
+          EOF
+
+          tar -C LibreELEC.tv --exclude='.git' --exclude='sources' -cf - . | \
+            zstd -T0 -6 -o freeze/libreelec-12.2.1-prepared-tree.tar.zst
+
+          tar -C LibreELEC.tv -cf - sources | \
+            zstd -T0 -3 -o "${RUNNER_TEMP}/libreelec-12.2.1-sources-x86_64-rpi4.tar.zst"
+
+          split -b 1800M -d -a 2 \
+            "${RUNNER_TEMP}/libreelec-12.2.1-sources-x86_64-rpi4.tar.zst" \
+            freeze/libreelec-12.2.1-sources-x86_64-rpi4.tar.zst.part-
+
+          (
+            cd freeze
+            sha256sum SOURCE-FREEZE.txt RESTORE.txt SOURCE-MANIFEST.sha256 SOURCE-SIZES.tsv \
+              x86_64-packages.txt rpi4-packages.txt \
+              libreelec-12.2.1-source-download-fixes.patch \
+              libreelec-12.2.1-prepared-tree.tar.zst \
+              kodi-jjs-${KODI_JJS_COMMIT}.tar.zst \
+              wrappers/*.yml \
+              libreelec-12.2.1-sources-x86_64-rpi4.tar.zst.part-* \
+              > FREEZE-PAYLOAD.sha256
+          )
+
+          du -h freeze/* freeze/wrappers/* | sort -h
+          df -h /
+
+      - name: Publish persistent source-freeze release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view "${FREEZE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Source-freeze release ${FREEZE_TAG} already exists; refusing to overwrite an immutable freeze." >&2
+            exit 1
+          fi
+
+          cat > freeze/RELEASE-NOTES.md <<'EOF'
+          Immutable build-source freeze for Kodi JJS 21.3-JJS.009 / LibreELEC 12.2.1.
+
+          Contains:
+          - union of all downloaded source archives required for Generic x86_64 and Raspberry Pi 4 / aarch64 image builds;
+          - exact prepared LibreELEC 12.2.1 source tree;
+          - exact Kodi JJS JJS.009 source tree;
+          - exact green Android, x86_64 and RPi4 workflow wrappers;
+          - package lists, per-source SHA256 manifest, file sizes and full payload checksums.
+
+          The large source archive is split into <= 1800 MiB release assets. Reassembly instructions are in RESTORE.txt.
+          EOF
+
+          mapfile -t FILES < <(find freeze -maxdepth 2 -type f ! -name RELEASE-NOTES.md -print | sort)
+          test "${#FILES[@]}" -gt 0
+
+          gh release create "${FREEZE_TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${KODI_JJS_COMMIT}" \
+            --title "LibreELEC 12.2.1 JJS source freeze v1 – x86_64 + Raspberry Pi 4" \
+            --notes-file freeze/RELEASE-NOTES.md \
+            "${FILES[@]}"
