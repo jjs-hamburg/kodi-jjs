@@ -1,0 +1,301 @@
+name: Publish Kodi JJS 21.3-JJS.010
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/publish-jjs-010.yml"
+  workflow_run:
+    workflows:
+      - "Build Kodi JJS 21.3 ARM64 APK"
+      - "Build LibreELEC 12.2.1 Generic x86_64 JJS"
+      - "Build LibreELEC 12.2.1 RPi4 aarch64 JJS"
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_RUN_ID: "37688855525"
+      ANDROID_HEAD_SHA: "922178ddec1fdad18e361897c4f861626dd1c40d"
+      ANDROID_BRANCH: "build/21.3-jjs-010-android"
+      ANDROID_SOURCE_COMMIT: "f5cbef54a2d04807e35441b9fe84eaacbb4b3b6c"
+      ANDROID_ARTIFACT_NAME: "Kodi-JJS-21.3-JJS.010-arm64"
+
+      X64_RUN_ID: "37689457988"
+      X64_HEAD_SHA: "ba70b5e40c63e367f0cd430c17a86c0ae4ebe44c"
+      X64_BRANCH: "build/21.3-jjs-010-libreelec"
+      X64_ARTIFACT_NAME: "LibreELEC-Generic-x86_64-12.2.1-JJS.010"
+
+      RPI4_RUN_ID: "37689732856"
+      RPI4_HEAD_SHA: "0ab6cc7cf388f9d5303a9a8ce416e5f412de25df"
+      RPI4_BRANCH: "build/21.3-jjs-010-rpi4"
+      RPI4_ARTIFACT_NAME: "LibreELEC-RPi4-aarch64-12.2.1-JJS.010"
+
+      RELEASE_TARGET: "f5cbef54a2d04807e35441b9fe84eaacbb4b3b6c"
+      RELEASE_TAG: "v21.3-JJS.010"
+      RELEASE_TITLE: "Kodi JJS 21.3-JJS.010 – Android ARM64 / LibreELEC x86_64 / Raspberry Pi 4"
+
+    steps:
+      - name: Check exact JJS.010 build readiness
+        id: readiness
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=true
+
+          check_run() {
+            local run_id="$1"
+            local expected_sha="$2"
+            local expected_branch="$3"
+            local label="$4"
+
+            local status conclusion head_sha head_branch
+            status="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
+            conclusion="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion // ""')"
+            head_sha="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.head_sha')"
+            head_branch="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.head_branch')"
+
+            test "$head_sha" = "$expected_sha"
+            test "$head_branch" = "$expected_branch"
+
+            echo "$label: run=$run_id status=$status conclusion=${conclusion:-pending} sha=$head_sha"
+            if [ "$status" != "completed" ] || [ "$conclusion" != "success" ]; then
+              ready=false
+            fi
+          }
+
+          check_run "$ANDROID_RUN_ID" "$ANDROID_HEAD_SHA" "$ANDROID_BRANCH" "Android ARM64"
+          check_run "$X64_RUN_ID" "$X64_HEAD_SHA" "$X64_BRANCH" "LibreELEC x86_64"
+          check_run "$RPI4_RUN_ID" "$RPI4_HEAD_SHA" "$RPI4_BRANCH" "LibreELEC RPi4"
+
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+          if [ "$ready" != "true" ]; then
+            echo "JJS.010 is not publishable yet; exact required runs are not all green."
+          fi
+
+      - name: Resolve exact JJS.010 artifacts
+        if: steps.readiness.outputs.ready == 'true'
+        id: artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          resolve_artifact() {
+            local run_id="$1"
+            local expected_name="$2"
+            local output_name="$3"
+            local json count artifact_id
+
+            json="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts?per_page=100")"
+            count="$(jq --arg name "$expected_name" '[.artifacts[] | select(.name == $name and .expired == false)] | length' <<< "$json")"
+            test "$count" -eq 1
+            artifact_id="$(jq -r --arg name "$expected_name" '.artifacts[] | select(.name == $name and .expired == false) | .id' <<< "$json")"
+            test -n "$artifact_id"
+            echo "${output_name}=${artifact_id}" >> "$GITHUB_OUTPUT"
+            echo "$expected_name: artifact $artifact_id"
+          }
+
+          resolve_artifact "$ANDROID_RUN_ID" "$ANDROID_ARTIFACT_NAME" "android_id"
+          resolve_artifact "$X64_RUN_ID" "$X64_ARTIFACT_NAME" "x64_id"
+          resolve_artifact "$RPI4_RUN_ID" "$RPI4_ARTIFACT_NAME" "rpi4_id"
+
+      - name: Download exact Android artifact
+        if: steps.readiness.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.artifacts.outputs.android_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" > android-artifact.zip
+          mkdir android
+          unzip -q android-artifact.zip -d android
+          find android -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: Download exact LibreELEC x86_64 artifact
+        if: steps.readiness.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.artifacts.outputs.x64_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" > x64-artifact.zip
+          mkdir x64
+          unzip -q x64-artifact.zip -d x64
+          find x64 -type f -printf '%P\n' | sort
+
+      - name: Download exact LibreELEC Raspberry Pi 4 artifact
+        if: steps.readiness.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.artifacts.outputs.rpi4_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" > rpi4-artifact.zip
+          mkdir rpi4
+          unzip -q rpi4-artifact.zip -d rpi4
+          find rpi4 -type f -printf '%P\n' | sort
+
+      - name: Verify exact JJS.010 release payload
+        if: steps.readiness.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f android/BUILD-INFO.txt
+          test -f android/SHA256SUMS.txt
+          test -f android/AAPT-BADGING.txt
+          test -f android/APKSIGNER-VERIFY.txt
+          APK="$(find android -maxdepth 1 -type f -name 'Kodi-JJS-21.3-JJS.010-*-arm64.apk' -print -quit)"
+          test -n "$APK"
+          grep -Fq "Kodi source commit: ${ANDROID_SOURCE_COMMIT}" android/BUILD-INFO.txt
+          grep -Fq "Kodi JJS version tag: JJS.010" android/BUILD-INFO.txt
+          grep -Fq "Version: 21.3-JJS.010 (2103000)" android/BUILD-INFO.txt
+          grep -Fq "Android display name: Kodi JJS" android/BUILD-INFO.txt
+          grep -Fq "Android package: org.jjs.kodi" android/BUILD-INFO.txt
+          EXPECTED_APK_SHA256="$(awk '{print $1; exit}' android/SHA256SUMS.txt)"
+          ACTUAL_APK_SHA256="$(sha256sum "$APK" | awk '{print $1}')"
+          test "$ACTUAL_APK_SHA256" = "$EXPECTED_APK_SHA256"
+
+          for dir in x64 rpi4; do
+            test -f "$dir/kodi-jjs-gapless-libreelec.patch"
+            test -f "$dir/kodi-jjs-identity-libreelec.patch"
+            grep -Fq 'xbmc/music/MusicInfoLoader.cpp' "$dir/kodi-jjs-gapless-libreelec.patch"
+            grep -Fq 'xbmc/music/MusicThumbLoader.cpp' "$dir/kodi-jjs-gapless-libreelec.patch"
+            grep -Fq 'xbmc/music/MusicThumbLoader.h' "$dir/kodi-jjs-gapless-libreelec.patch"
+            grep -Fq 'VERSION_TAG JJS.010' "$dir/kodi-jjs-identity-libreelec.patch"
+          done
+
+          test -n "$(find x64 -type f -name 'LibreELEC-Generic.x86_64-12.2.1-JJS.010.tar' -print -quit)"
+          test -n "$(find x64 -type f -name 'LibreELEC-Generic.x86_64-12.2.1-JJS.010.img.gz' -print -quit)"
+          test -n "$(find rpi4 -type f -name 'LibreELEC-RPi4.aarch64-12.2.1-JJS.010.tar' -print -quit)"
+          test -n "$(find rpi4 -type f -name 'LibreELEC-RPi4.aarch64-12.2.1-JJS.010.img.gz' -print -quit)"
+
+      - name: Publish GitHub release
+        if: steps.readiness.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > RELEASE-NOTES.md <<'EOF'
+          Kodi JJS 21.3-JJS.010.
+
+          Confirmed build platforms:
+          - Android ARM64 / arm64-v8a
+          - LibreELEC 12.2.1 Generic x86_64
+          - LibreELEC 12.2.1 Raspberry Pi 4 / aarch64
+
+          JJS.010 change:
+          - Music file/folder artwork loading now prefetches library artwork for the complete visible item set and batch-loads cached path thumb/fanart mappings before per-item processing. Successful misses are cached too, avoiding repeated per-item database/cache lookups. This extends the JJS.009 artist-view optimization to normal music file/folder browsing and substantially reduces refresh latency in large music folders.
+
+          All JJS.009 and earlier fixes are retained, including batched artist artwork mappings, seamless RAW / TrueHD / Dolby Atmos handover, MAT state preservation, RAW EOF backlog handling, music-library cancellation handling, DialogProgressBG lifecycle handling, Kodi JJS splash and LibreELEC update-safety defaults.
+          EOF
+
+          mapfile -t ANDROID_FILES < <(find android -maxdepth 1 -type f \( -name '*.apk' -o -name '*.txt' \) -print | sort)
+          mapfile -t X64_FILES < <(find x64 -type f \( -name '*.tar' -o -name '*.img.gz' -o -name '*.sha256' \) -print | sort)
+          mapfile -t RPI4_FILES < <(find rpi4 -type f \( -name '*.tar' -o -name '*.img.gz' -o -name '*.sha256' \) -print | sort)
+
+          RELEASE_FILES=(
+            "${ANDROID_FILES[@]}"
+            "${X64_FILES[@]}"
+            "${RPI4_FILES[@]}"
+            x64/kodi-jjs-gapless-libreelec.patch
+            x64/kodi-jjs-identity-libreelec.patch
+          )
+
+          test "${#ANDROID_FILES[@]}" -gt 0
+          test "${#X64_FILES[@]}" -gt 0
+          test "${#RPI4_FILES[@]}" -gt 0
+
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" "${RELEASE_FILES[@]}" --clobber
+            gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+              --title "${RELEASE_TITLE}" --notes-file RELEASE-NOTES.md
+          else
+            gh release create "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+              --target "${RELEASE_TARGET}" \
+              --title "${RELEASE_TITLE}" \
+              --notes-file RELEASE-NOTES.md \
+              "${RELEASE_FILES[@]}"
+          fi
+
+      - name: Update README for JJS.010
+        if: steps.readiness.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch master "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" repo
+          cd repo
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("README.md")
+          text = path.read_text(encoding="utf-8")
+
+          jjs009 = '''- **Slow artist-picture refresh corrected – JJS.009**  
+          **Problem:** Returning to a music artist view could visibly reload artist pictures one after another and take many seconds with large libraries, especially with a central MariaDB/MySQL database.  
+          **Cause:** Kodi used an inefficient serial refresh routine: after loading the artist list it performed a separate artwork database query for every single artist, even though the image files themselves were already cached locally.  
+          **Solution:** Kodi JJS batch-loads all artist-to-artwork mappings together with the artist result set. This removes the serial database round trips while keeping Kodi's existing artwork fallback behaviour unchanged.
+          '''
+
+          jjs010 = '''
+          - **Slow music-folder artwork/cache refresh corrected – JJS.010**  
+          **Problem:** Opening or returning to large music file/folder views could spend unnecessary time resolving artwork and cached folder images item by item.  
+          **Cause:** The music thumb loader repeated library-art and path-cache lookups for individual items even though the complete folder item list was already available at loader start.  
+          **Solution:** Kodi JJS prefetches artist/album/song library artwork and cached path thumb/fanart mappings in batches for the complete visible item set. Successful misses are cached as well, so Kodi does not repeat per-item lookups for paths with no cached artwork.
+          '''
+
+          if "Slow music-folder artwork/cache refresh corrected – JJS.010" not in text:
+              if jjs009 not in text:
+                  raise SystemExit("JJS.009 README anchor not found")
+              text = text.replace(jjs009, jjs009 + jjs010, 1)
+
+          text = text.replace(
+              "**Kodi JJS 21.3-JJS.009 – Android ARM64 / LibreELEC Generic x86_64 / LibreELEC Raspberry Pi 4**",
+              "**Kodi JJS 21.3-JJS.010 – Android ARM64 / LibreELEC Generic x86_64 / LibreELEC Raspberry Pi 4**",
+              1,
+          )
+          text = text.replace(
+              "https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.009",
+              "https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.010",
+              1,
+          )
+          text = text.replace(
+              "JJS.009 provides LibreELEC 12.2.1 builds for **Generic x86_64** and **Raspberry Pi 4 (aarch64)**.",
+              "JJS.010 provides LibreELEC 12.2.1 builds for **Generic x86_64** and **Raspberry Pi 4 (aarch64)**.",
+              1,
+          )
+
+          path.write_text(text, encoding="utf-8")
+          PY
+
+          if git diff --quiet -- README.md; then
+            echo "README already describes JJS.010."
+            exit 0
+          fi
+
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "Update README for JJS.010"
+          git push origin master
