@@ -51,8 +51,17 @@ public:
    */
   virtual bool FillThumb(CFileItem &item, bool folderThumbs = true);
 
+  std::string GetCachedImage(const CFileItem& item, const std::string& type) override;
+
 protected:
   CMusicDatabase *m_musicDatabase;
   typedef std::map<int, std::map<std::string, std::string> > ArtCache;
   ArtCache m_albumArt;
+
+private:
+  void PrefetchLibraryArt();
+  void PrefetchCachedImages();
+
+  std::map<std::string, std::map<std::string, std::string>> m_cachedPathArt;
+  bool m_cachedPathArtPrefetched{false};
 };
