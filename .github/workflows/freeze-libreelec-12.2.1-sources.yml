@@ -75,8 +75,12 @@ jobs:
           find LibreELEC.tv/packages -type f -name package.mk -print0 | xargs -0 sed -i \
             -e 's#https://ftpmirror.gnu.org/gnu/#https://mirrors.kernel.org/gnu/#g' \
             -e 's#https://ftpmirror.gnu.org/#https://mirrors.kernel.org/gnu/#g' \
+            -e 's#http://ftpmirror.gnu.org/gnu/#https://mirrors.kernel.org/gnu/#g' \
+            -e 's#http://ftpmirror.gnu.org/#https://mirrors.kernel.org/gnu/#g' \
             -e 's#https://ftp.gnu.org/pub/gnu/#https://mirrors.kernel.org/gnu/#g' \
-            -e 's#https://ftp.gnu.org/gnu/#https://mirrors.kernel.org/gnu/#g'
+            -e 's#https://ftp.gnu.org/gnu/#https://mirrors.kernel.org/gnu/#g' \
+            -e 's#http://ftp.gnu.org/pub/gnu/#https://mirrors.kernel.org/gnu/#g' \
+            -e 's#http://ftp.gnu.org/gnu/#https://mirrors.kernel.org/gnu/#g'
 
           sed -i \
             's#https://github.com/plougher/squashfs-tools/archive/${PKG_VERSION}.tar.gz#https://github.com/plougher/squashfs-tools/releases/download/${PKG_VERSION}/${PKG_NAME}-${PKG_VERSION}.tar.gz#' \
@@ -130,7 +134,7 @@ jobs:
             's#https://download.savannah.gnu.org/releases/freetype/freetype-${PKG_VERSION}.tar.xz#https://downloads.sourceforge.net/project/freetype/freetype2/${PKG_VERSION}/freetype-${PKG_VERSION}.tar.xz#' \
             LibreELEC.tv/packages/print/freetype/package.mk
 
-          if grep -R -E 'ftpmirror\.gnu\.org|https://ftp\.gnu\.org/(pub/)?gnu/' LibreELEC.tv/packages; then
+          if grep -R -E 'https?://(ftp|ftpmirror)\.gnu\.org(/pub)?/gnu/' LibreELEC.tv/packages; then
             echo "An unstable GNU source URL remains after rewrite." >&2
             exit 1
           fi
