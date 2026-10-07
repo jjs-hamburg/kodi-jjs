@@ -261,15 +261,19 @@ jobs:
           sed -i 's/LIBREELEC_VERSION="devel"/LIBREELEC_VERSION="12.2.1-JJS.009"/' \
             LibreELEC.tv/distributions/LibreELEC/version
 
-      - name: Cache LibreELEC source archives
+      - name: Cache frozen LibreELEC source snapshot
         if: steps.ccache_seed.outputs.cache-hit != 'true'
+        id: source_snapshot_cache
         uses: actions/cache@v4
         with:
           path: LibreELEC.tv/sources
-          key: libreelec-12.2.1-generic-x86_64-sources-v1
-          restore-keys: |
-            libreelec-12.2.1-generic-x86_64-sources-
+          key: libreelec-12.2.1-generic-x86_64-source-snapshot-v1
 
+      - name: Hydrate frozen LibreELEC source snapshot
+        if: steps.ccache_seed.outputs.cache-hit != 'true' && steps.source_snapshot_cache.outputs.cache-hit != 'true'
+        uses: jjs-hamburg/kodi-jjs/.github/actions/hydrate-libreelec-12.2.1-sources@8aa9540b6d08955f1af7b4efbdafa30c2bbbe976
+        with:
+          libreelec-dir: LibreELEC.tv
       - name: Preflight all LibreELEC source downloads
         if: steps.ccache_seed.outputs.cache-hit != 'true'
         timeout-minutes: 45
@@ -636,14 +640,18 @@ jobs:
           sed -i 's/^CCACHE_CACHE_SIZE=.*/CCACHE_CACHE_SIZE="5G"/' \
             LibreELEC.tv/config/options
 
-      - name: Cache LibreELEC source archives
+      - name: Cache frozen LibreELEC source snapshot
+        id: source_snapshot_cache
         uses: actions/cache@v4
         with:
           path: LibreELEC.tv/sources
-          key: libreelec-12.2.1-generic-x86_64-sources-v1
-          restore-keys: |
-            libreelec-12.2.1-generic-x86_64-sources-
+          key: libreelec-12.2.1-generic-x86_64-source-snapshot-v1
 
+      - name: Hydrate frozen LibreELEC source snapshot
+        if: steps.source_snapshot_cache.outputs.cache-hit != 'true'
+        uses: jjs-hamburg/kodi-jjs/.github/actions/hydrate-libreelec-12.2.1-sources@8aa9540b6d08955f1af7b4efbdafa30c2bbbe976
+        with:
+          libreelec-dir: LibreELEC.tv
       - name: Preflight all LibreELEC source downloads
         timeout-minutes: 45
         working-directory: LibreELEC.tv
