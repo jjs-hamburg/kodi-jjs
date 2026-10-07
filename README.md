@@ -23,26 +23,40 @@ I originally created Kodi JJS for my own personal use because the audible interr
 
 In addition to the gapless RAW / TrueHD / Atmos work, Kodi JJS carries a small set of independent Kodi core fixes found while using and testing the fork:
 
-- **Manual Next / Previous and incompatible-format transition races – JJS.004**  
-  Manual track changes could overlap asynchronous preparation with PAPlayer shutdown and leave stale or orphaned AudioEngine streams behind. Kodi JJS waits for outstanding queue work, closes the previous streams in a defined order and uses Kodi's normal reopen path when the actual output format changes.
+- **Unreliable manual Next / Previous transitions corrected – JJS.004**  
+  **Problem:** Manual track changes could leave stale or orphaned AudioEngine streams behind and make transitions unreliable, especially when the output format changed.  
+  **Cause:** Asynchronous preparation of the next item could overlap PAPlayer shutdown and stream teardown.  
+  **Solution:** Kodi JJS waits for outstanding queue work, closes the previous streams in a defined order and uses Kodi's normal reopen path when the actual output format changes.
 
-- **PAPlayer restart with a stale start event – JJS.004**  
-  A completed PAPlayer thread could leave its start event signaled. A following manual transition could then make the newly created playback thread exit before the new item became active. Kodi JJS clears that stale event before restarting the worker.
+- **PAPlayer restart failure after a previous playback thread ended – JJS.004**  
+  **Problem:** A following manual transition could fail because the newly created playback thread exited before the new item became active.  
+  **Cause:** A completed PAPlayer thread could leave its start event signaled and the stale event was reused by the next thread.  
+  **Solution:** Kodi JJS clears the stale start event before restarting the PAPlayer worker.
 
-- **Playback callback blocked by audio file-state housekeeping – JJS.005**  
-  Saving the outgoing audio file state could keep the application stack lock while database housekeeping ran. The successor playback callback needs the same lock, so audio could already be playing while the title and playlist marker still showed the previous track. Kodi JJS releases the lock before that audio-only housekeeping work.
+- **Audio starts but title / playlist display remains on the previous track – JJS.005**  
+  **Problem:** Playback of the next track could already have started while Kodi still displayed the previous title and playlist position.  
+  **Cause:** Saving the outgoing audio file state kept the application stack lock while database housekeeping ran; the successor playback callback needed the same lock.  
+  **Solution:** Kodi JJS releases that lock before the audio-only housekeeping work, allowing the playback callback to update the UI immediately.
 
-- **False music tag-rescan path after database open failure – JJS.006**  
-  `GetMusicNeedsTagScan()` can return a negative error value when the music database could not be opened. Stock Kodi treated every non-zero result as "tag scan required". Kodi JJS enters the rescan path only when the returned value is actually positive.
+- **False music-library tag rescan after database open failure – JJS.006**  
+  **Problem:** A temporary music-database open failure could incorrectly send Kodi into the "tag scan required" path.  
+  **Cause:** `GetMusicNeedsTagScan()` can return a negative error value, but stock Kodi treated every non-zero value as "rescan required".  
+  **Solution:** Kodi JJS enters the tag-rescan path only when the returned value is actually positive.
 
-- **Cancelling a music-library update can leave the file counter alive – JJS.008**  
-  The parallel `MusicFileCounter` used for percentage calculation checked the stop flag too late during recursive counting. Cancelling a large library scan could therefore leave the operation waiting for the counter to unwind. Kodi JJS checks the stop flag before new directory reads and inside the counting loops so cancellation returns promptly.
+- **Cancelling a large music-library update could take unnecessarily long – JJS.008**  
+  **Problem:** After cancelling a large music scan, Kodi could continue waiting while the background file counter kept walking the library tree.  
+  **Cause:** The parallel `MusicFileCounter` checked the stop flag too late during recursive counting.  
+  **Solution:** Kodi JJS checks the stop flag before new directory reads and inside the counting loops so cancellation returns promptly.
 
-- **Destroyed Python `DialogProgressBG` can close unrelated progress displays – JJS.008**  
-  Kodi's extended progress window is shared by multiple background-progress handles. Destroying one Python `DialogProgressBG` object closed that shared window instead of finishing only its own handle. Kodi JJS now marks only the owning handle finished, leaving other progress operations visible.
+- **Closing one Python background progress dialog could close unrelated progress displays – JJS.008**  
+  **Problem:** Destroying one Python `DialogProgressBG` object could make other background progress operations disappear from the screen as well.  
+  **Cause:** Kodi's extended progress window is shared by multiple handles, but object destruction closed the shared window instead of finishing only the owning handle.  
+  **Solution:** Kodi JJS now marks only that handle as finished and leaves unrelated progress operations visible.
 
-- **Artist artwork refresh causes one database query per artist – JJS.009**  
-  Music artist views could reload artwork with a separate database query for every artist. With a central MariaDB/MySQL music database this made returning to an artist list visibly slow even though the artwork itself was already cached locally. Kodi JJS batch-loads the artist-to-artwork mappings with the artist query, eliminating the serial per-artist database round trips while preserving Kodi's existing fallback behaviour.
+- **Slow artist-picture refresh corrected – JJS.009**  
+  **Problem:** Returning to a music artist view could visibly reload artist pictures one after another and take many seconds with large libraries, especially with a central MariaDB/MySQL database.  
+  **Cause:** Kodi used an inefficient serial refresh routine: after loading the artist list it performed a separate artwork database query for every single artist, even though the image files themselves were already cached locally.  
+  **Solution:** Kodi JJS batch-loads all artist-to-artwork mappings together with the artist result set. This removes the serial database round trips while keeping Kodi's existing artwork fallback behaviour unchanged.
 
 ### Current release
 
