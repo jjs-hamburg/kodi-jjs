@@ -26,12 +26,15 @@
 #include "utils/URIUtils.h"
 #include "utils/log.h"
 
+#include <chrono>
+
 using namespace XFILE;
 using namespace MUSIC_INFO;
 
 // HACK until we make this threadable - specify 1 thread only for now
 CMusicInfoLoader::CMusicInfoLoader() : CBackgroundInfoLoader()
 {
+  EnableJjsMusicNavDiagnostics("MusicInfoLoader");
   m_mapFileItems = new CFileItemList;
 
   m_thumbLoader = new CMusicThumbLoader();
@@ -46,6 +49,14 @@ CMusicInfoLoader::~CMusicInfoLoader()
 
 void CMusicInfoLoader::OnLoaderStart()
 {
+  const auto loaderStart = std::chrono::steady_clock::now();
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader OnLoaderStart BEGIN items={}",
+            m_pVecItems ? m_pVecItems->Size() : 0);
+
+  const auto cacheStart = std::chrono::steady_clock::now();
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader CacheLoad BEGIN mode={}",
+            m_strCacheFileName.empty() ? "directory" : "file");
+
   // Load previously cached items from HD
   if (!m_strCacheFileName.empty())
     LoadCache(m_strCacheFileName, *m_mapFileItems);
@@ -56,6 +67,11 @@ void CMusicInfoLoader::OnLoaderStart()
     m_mapFileItems->SetFastLookup(true);
   }
 
+  const auto cacheElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - cacheStart);
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader CacheLoad END ms={} cached_items={}",
+            cacheElapsed.count(), m_mapFileItems->Size());
+
   m_strPrevPath.clear();
 
   m_databaseHits = m_tagReads = 0;
@@ -63,13 +79,26 @@ void CMusicInfoLoader::OnLoaderStart()
   if (m_pProgressCallback)
     m_pProgressCallback->SetProgressMax(m_pVecItems->GetFileCount());
 
+  const auto dbOpenStart = std::chrono::steady_clock::now();
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader MusicDatabase.Open BEGIN");
   m_musicDatabase.Open();
+  const auto dbOpenElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - dbOpenStart);
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader MusicDatabase.Open END ms={}",
+            dbOpenElapsed.count());
 
   if (m_thumbLoader)
   {
+    CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader ThumbLoaderStart BEGIN");
     m_thumbLoader->SetPrefetchItems(*m_pVecItems);
     m_thumbLoader->OnLoaderStart();
+    CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader ThumbLoaderStart END");
   }
+
+  const auto loaderElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - loaderStart);
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader OnLoaderStart END ms={}",
+            loaderElapsed.count());
 }
 
 bool CMusicInfoLoader::LoadAdditionalTagInfo(CFileItem* pItem)
@@ -156,7 +185,15 @@ bool CMusicInfoLoader::LoadItemCached(CFileItem* pItem)
     return false;
 
   // Get thumb for item
+  const auto thumbStart = std::chrono::steady_clock::now();
   m_thumbLoader->LoadItem(pItem);
+  const auto thumbElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - thumbStart);
+  if (thumbElapsed.count() >= 250)
+  {
+    CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader ThumbLoad SLOW ms={} item='{}'",
+              thumbElapsed.count(), pItem->GetPath());
+  }
 
   return true;
 }
@@ -191,7 +228,15 @@ bool CMusicInfoLoader::LoadItemLookup(CFileItem* pItem)
       {
         // The item is from another directory as the last one,
         // query the database for the new directory...
+        const auto songsByPathStart = std::chrono::steady_clock::now();
+        CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader GetSongsByPath BEGIN path='{}'",
+                  strPath);
         m_musicDatabase.GetSongsByPath(strPath, m_songsMap);
+        const auto songsByPathElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - songsByPathStart);
+        CLog::Log(LOGINFO,
+                  "[JJS-MUSIC-NAV] MusicInfoLoader GetSongsByPath END ms={} entries={} path='{}'",
+                  songsByPathElapsed.count(), m_songsMap.size(), strPath);
         m_databaseHits++;
       }
 
@@ -231,8 +276,18 @@ bool CMusicInfoLoader::LoadItemLookup(CFileItem* pItem)
         // get correct tag parser
         std::unique_ptr<IMusicInfoTagLoader> pLoader (CMusicInfoTagLoaderFactory::CreateLoader(*pItem));
         if (nullptr != pLoader)
+        {
+          const auto tagStart = std::chrono::steady_clock::now();
           // get tag
           pLoader->Load(pItem->GetPath(), *pItem->GetMusicInfoTag());
+          const auto tagElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+              std::chrono::steady_clock::now() - tagStart);
+          if (tagElapsed.count() >= 250)
+          {
+            CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader TagLoad SLOW ms={} item='{}'",
+                      tagElapsed.count(), pItem->GetPath());
+          }
+        }
         m_tagReads++;
       }
 
@@ -245,6 +300,11 @@ bool CMusicInfoLoader::LoadItemLookup(CFileItem* pItem)
 
 void CMusicInfoLoader::OnLoaderFinish()
 {
+  const auto finishStart = std::chrono::steady_clock::now();
+  CLog::Log(LOGINFO,
+            "[JJS-MUSIC-NAV] MusicInfoLoader OnLoaderFinish BEGIN stopped={} db_hits={} tag_reads={}",
+            static_cast<bool>(m_bStop), m_databaseHits, m_tagReads);
+
   // cleanup last loaded songs from database
   m_songsMap.clear();
 
@@ -253,14 +313,47 @@ void CMusicInfoLoader::OnLoaderFinish()
 
   // Save loaded items to HD
   if (!m_strCacheFileName.empty())
+  {
+    const auto saveStart = std::chrono::steady_clock::now();
+    CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader SaveCache BEGIN file='{}'",
+              m_strCacheFileName);
     SaveCache(m_strCacheFileName, *m_pVecItems);
+    const auto saveElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - saveStart);
+    CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader SaveCache END ms={}",
+              saveElapsed.count());
+  }
   else if (!m_bStop && (m_databaseHits > 1 || m_tagReads > 0))
+  {
+    const auto saveStart = std::chrono::steady_clock::now();
+    CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader DirectoryCacheSave BEGIN items={}",
+              m_pVecItems ? m_pVecItems->Size() : 0);
     m_pVecItems->Save();
+    const auto saveElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - saveStart);
+    CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader DirectoryCacheSave END ms={}",
+              saveElapsed.count());
+  }
 
+  const auto closeStart = std::chrono::steady_clock::now();
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader MusicDatabase.Close BEGIN");
   m_musicDatabase.Close();
+  const auto closeElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - closeStart);
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader MusicDatabase.Close END ms={}",
+            closeElapsed.count());
 
   if (m_thumbLoader)
+  {
+    CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader ThumbLoaderFinish BEGIN");
     m_thumbLoader->OnLoaderFinish();
+    CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader ThumbLoaderFinish END");
+  }
+
+  const auto finishElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - finishStart);
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicInfoLoader OnLoaderFinish END ms={}",
+            finishElapsed.count());
 }
 
 void CMusicInfoLoader::UseCacheOnHD(const std::string& strFileName)

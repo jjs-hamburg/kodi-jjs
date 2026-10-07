@@ -13,7 +13,28 @@
 #include "threads/Thread.h"
 #include "utils/log.h"
 
+#include <chrono>
 #include <mutex>
+
+namespace
+{
+const char* JjsLoaderStageName(int stage)
+{
+  switch (stage)
+  {
+    case 1:
+      return "OnLoaderStart";
+    case 2:
+      return "LoadItemCached";
+    case 3:
+      return "LoadItemLookup";
+    case 4:
+      return "OnLoaderFinish";
+    default:
+      return "idle";
+  }
+}
+} // unnamed namespace
 
 CBackgroundInfoLoader::CBackgroundInfoLoader() = default;
 
@@ -24,6 +45,8 @@ CBackgroundInfoLoader::~CBackgroundInfoLoader()
 
 void CBackgroundInfoLoader::Reset()
 {
+  m_jjsCurrentItem.store(nullptr, std::memory_order_relaxed);
+  m_jjsStage.store(0, std::memory_order_relaxed);
   m_pVecItems = nullptr;
   m_vecItems.clear();
   m_bIsLoading = false;
@@ -35,7 +58,9 @@ void CBackgroundInfoLoader::Run()
   {
     if (!m_vecItems.empty())
     {
+      m_jjsStage.store(1, std::memory_order_relaxed);
       OnLoaderStart();
+      m_jjsStage.store(0, std::memory_order_relaxed);
 
       // Stage 1: All "fast" stuff we have already cached
       for (std::vector<CFileItemPtr>::const_iterator iter = m_vecItems.begin(); iter != m_vecItems.end(); ++iter)
@@ -46,6 +71,8 @@ void CBackgroundInfoLoader::Run()
         if ((m_pProgressCallback && m_pProgressCallback->Abort()) || m_bStop)
           break;
 
+        m_jjsCurrentItem.store(pItem.get(), std::memory_order_relaxed);
+        m_jjsStage.store(2, std::memory_order_relaxed);
         try
         {
           if (LoadItemCached(pItem.get()) && m_pObserver)
@@ -57,6 +84,8 @@ void CBackgroundInfoLoader::Run()
                     "CBackgroundInfoLoader::LoadItemCached - Unhandled exception for item {}",
                     CURL::GetRedacted(pItem->GetPath()));
         }
+        m_jjsCurrentItem.store(nullptr, std::memory_order_relaxed);
+        m_jjsStage.store(0, std::memory_order_relaxed);
       }
 
       // Stage 2: All "slow" stuff that we need to lookup
@@ -68,6 +97,8 @@ void CBackgroundInfoLoader::Run()
         if ((m_pProgressCallback && m_pProgressCallback->Abort()) || m_bStop)
           break;
 
+        m_jjsCurrentItem.store(pItem.get(), std::memory_order_relaxed);
+        m_jjsStage.store(3, std::memory_order_relaxed);
         try
         {
           if (LoadItemLookup(pItem.get()) && m_pObserver)
@@ -79,10 +110,14 @@ void CBackgroundInfoLoader::Run()
                     "CBackgroundInfoLoader::LoadItemLookup - Unhandled exception for item {}",
                     CURL::GetRedacted(pItem->GetPath()));
         }
+        m_jjsCurrentItem.store(nullptr, std::memory_order_relaxed);
+        m_jjsStage.store(0, std::memory_order_relaxed);
       }
     }
 
+    m_jjsStage.store(4, std::memory_order_relaxed);
     OnLoaderFinish();
+    m_jjsStage.store(0, std::memory_order_relaxed);
   }
   catch (...)
   {
@@ -121,6 +156,20 @@ void CBackgroundInfoLoader::StopAsync()
 
 void CBackgroundInfoLoader::StopThread()
 {
+  const bool traceWait = m_jjsDiagnostics && m_thread != nullptr;
+  const auto waitStart = std::chrono::steady_clock::now();
+
+  if (traceWait)
+  {
+    CFileItem* currentItem = m_jjsCurrentItem.load(std::memory_order_relaxed);
+    const std::string currentPath =
+        currentItem ? CURL::GetRedacted(currentItem->GetPath()) : std::string{};
+    CLog::Log(LOGINFO,
+              "[JJS-MUSIC-NAV] {} StopThread BEGIN stage={} item='{}' items={} loading={}",
+              m_jjsDiagnosticName, JjsLoaderStageName(m_jjsStage.load(std::memory_order_relaxed)),
+              currentPath, m_vecItems.size(), static_cast<bool>(m_bIsLoading));
+  }
+
   StopAsync();
 
   if (m_thread)
@@ -129,6 +178,15 @@ void CBackgroundInfoLoader::StopThread()
     delete m_thread;
     m_thread = NULL;
   }
+
+  if (traceWait)
+  {
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - waitStart);
+    CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] {} StopThread END ms={}", m_jjsDiagnosticName,
+              elapsed.count());
+  }
+
   Reset();
 }
 

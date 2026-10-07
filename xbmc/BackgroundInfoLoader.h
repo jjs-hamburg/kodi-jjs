@@ -12,6 +12,7 @@
 #include "threads/CriticalSection.h"
 #include "threads/IRunnable.h"
 
+#include <atomic>
 #include <memory>
 #include <vector>
 
@@ -48,6 +49,12 @@ protected:
   virtual void OnLoaderStart() {}
   virtual void OnLoaderFinish() {}
 
+  void EnableJjsMusicNavDiagnostics(const char* name)
+  {
+    m_jjsDiagnostics = true;
+    m_jjsDiagnosticName = name;
+  }
+
   CFileItemList* m_pVecItems{nullptr};
   std::vector<CFileItemPtr> m_vecItems; // FileItemList would delete the items and we only want to keep a reference.
   CCriticalSection m_lock;
@@ -58,6 +65,11 @@ protected:
 
   IBackgroundLoaderObserver* m_pObserver{nullptr};
   IProgressCallback* m_pProgressCallback{nullptr};
+
+  std::atomic<CFileItem*> m_jjsCurrentItem{nullptr};
+  std::atomic<int> m_jjsStage{0};
+  const char* m_jjsDiagnosticName{"BackgroundInfoLoader"};
+  bool m_jjsDiagnostics{false};
 
 private:
   void Reset();

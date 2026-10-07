@@ -15,8 +15,10 @@
 #include "music/infoscanner/MusicInfoScanner.h"
 #include "music/tags/MusicInfoTag.h"
 #include "utils/StringUtils.h"
+#include "utils/log.h"
 #include "video/VideoThumbLoader.h"
 
+#include <chrono>
 #include <cstdlib>
 #include <map>
 #include <set>
@@ -315,6 +317,7 @@ bool ApplyLibraryArt(CFileItem& item, const std::vector<ArtForThumbLoader>& art)
 
 CMusicThumbLoader::CMusicThumbLoader() : CThumbLoader()
 {
+  EnableJjsMusicNavDiagnostics("MusicThumbLoader");
   m_musicDatabase = new CMusicThumbLoaderDatabase;
 }
 
@@ -340,25 +343,50 @@ const std::vector<CFileItemPtr>& CMusicThumbLoader::GetPrefetchItems() const
 
 void CMusicThumbLoader::OnLoaderStart()
 {
+  const auto loaderStart = std::chrono::steady_clock::now();
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicThumbLoader OnLoaderStart BEGIN items={}",
+            GetPrefetchItems().size());
+
+  const auto dbOpenStart = std::chrono::steady_clock::now();
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicThumbLoader MusicDatabase.Open BEGIN");
   m_musicDatabase->Open();
+  const auto dbOpenElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - dbOpenStart);
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicThumbLoader MusicDatabase.Open END ms={}",
+            dbOpenElapsed.count());
+
   m_albumArt.clear();
   PrefetchLibraryArt();
   PrefetchCachedImages();
   CThumbLoader::OnLoaderStart();
+
+  const auto loaderElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - loaderStart);
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicThumbLoader OnLoaderStart END ms={}",
+            loaderElapsed.count());
 }
 
 void CMusicThumbLoader::OnLoaderFinish()
 {
+  const auto finishStart = std::chrono::steady_clock::now();
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicThumbLoader OnLoaderFinish BEGIN");
+
   m_musicDatabase->Close();
   m_albumArt.clear();
   m_manualPrefetchItems.clear();
   m_cachedPathArt.clear();
   m_cachedPathArtPrefetched = false;
   CThumbLoader::OnLoaderFinish();
+
+  const auto finishElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - finishStart);
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] MusicThumbLoader OnLoaderFinish END ms={}",
+            finishElapsed.count());
 }
 
 void CMusicThumbLoader::PrefetchLibraryArt()
 {
+  const auto prefetchStart = std::chrono::steady_clock::now();
   const auto& items = GetPrefetchItems();
   std::set<int> artistIds;
   std::set<int> albumIds;
@@ -382,14 +410,50 @@ void CMusicThumbLoader::PrefetchLibraryArt()
       songIds.insert(tag.GetDatabaseId());
   }
 
+  CLog::Log(LOGINFO,
+            "[JJS-MUSIC-NAV] PrefetchLibraryArt BEGIN items={} artists={} albums={} songs={}",
+            items.size(), artistIds.size(), albumIds.size(), songIds.size());
+
   auto* database = static_cast<CMusicThumbLoaderDatabase*>(m_musicDatabase);
   LibraryArtBatch artistArt;
   LibraryArtBatch albumArt;
   LibraryArtBatch songArt;
 
-  const bool artistPrefetched = artistIds.empty() || database->GetArtistArtBatch(artistIds, artistArt);
-  const bool albumPrefetched = albumIds.empty() || database->GetAlbumArtBatch(albumIds, albumArt);
-  const bool songPrefetched = songIds.empty() || database->GetSongArtBatch(songIds, songArt);
+  bool artistPrefetched = true;
+  if (!artistIds.empty())
+  {
+    const auto batchStart = std::chrono::steady_clock::now();
+    CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] ArtistArtBatch BEGIN ids={}", artistIds.size());
+    artistPrefetched = database->GetArtistArtBatch(artistIds, artistArt);
+    const auto batchElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - batchStart);
+    CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] ArtistArtBatch END ms={} ok={} items_with_art={}",
+              batchElapsed.count(), artistPrefetched, artistArt.size());
+  }
+
+  bool albumPrefetched = true;
+  if (!albumIds.empty())
+  {
+    const auto batchStart = std::chrono::steady_clock::now();
+    CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] AlbumArtBatch BEGIN ids={}", albumIds.size());
+    albumPrefetched = database->GetAlbumArtBatch(albumIds, albumArt);
+    const auto batchElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - batchStart);
+    CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] AlbumArtBatch END ms={} ok={} items_with_art={}",
+              batchElapsed.count(), albumPrefetched, albumArt.size());
+  }
+
+  bool songPrefetched = true;
+  if (!songIds.empty())
+  {
+    const auto batchStart = std::chrono::steady_clock::now();
+    CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] SongArtBatch BEGIN ids={}", songIds.size());
+    songPrefetched = database->GetSongArtBatch(songIds, songArt);
+    const auto batchElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - batchStart);
+    CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] SongArtBatch END ms={} ok={} items_with_art={}",
+              batchElapsed.count(), songPrefetched, songArt.size());
+  }
 
   for (const auto& item : items)
   {
@@ -430,10 +494,16 @@ void CMusicThumbLoader::PrefetchLibraryArt()
     // If the batch itself failed, leave this unset so Kodi's existing per-item lookup is used.
     item->SetProperty("libraryartfilled", true);
   }
+
+  const auto prefetchElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - prefetchStart);
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] PrefetchLibraryArt END ms={}",
+            prefetchElapsed.count());
 }
 
 void CMusicThumbLoader::PrefetchCachedImages()
 {
+  const auto prefetchStart = std::chrono::steady_clock::now();
   m_cachedPathArt.clear();
   m_cachedPathArtPrefetched = false;
 
@@ -448,14 +518,34 @@ void CMusicThumbLoader::PrefetchCachedImages()
       paths.insert(item->GetPath());
   }
 
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] PrefetchCachedImages BEGIN items={} paths={}",
+            items.size(), paths.size());
+
   if (paths.empty())
+  {
+    CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] PrefetchCachedImages END ms=0 no_paths=true");
     return;
+  }
 
   CMusicThumbLoaderTextureDatabase database;
-  if (!database.Open())
+  const auto openStart = std::chrono::steady_clock::now();
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] TextureDatabase.Open BEGIN");
+  const bool opened = database.Open();
+  const auto openElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - openStart);
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] TextureDatabase.Open END ms={} ok={}",
+            openElapsed.count(), opened);
+  if (!opened)
     return;
 
+  const auto batchStart = std::chrono::steady_clock::now();
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] TexturePathBatch BEGIN paths={}", paths.size());
   const bool prefetched = database.GetPathArtBatch(paths, m_cachedPathArt);
+  const auto batchElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - batchStart);
+  CLog::Log(LOGINFO,
+            "[JJS-MUSIC-NAV] TexturePathBatch END ms={} ok={} paths_with_art={}",
+            batchElapsed.count(), prefetched, m_cachedPathArt.size());
   database.Close();
   if (!prefetched)
   {
@@ -469,6 +559,11 @@ void CMusicThumbLoader::PrefetchCachedImages()
     m_cachedPathArt[path];
 
   m_cachedPathArtPrefetched = true;
+
+  const auto prefetchElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - prefetchStart);
+  CLog::Log(LOGINFO, "[JJS-MUSIC-NAV] PrefetchCachedImages END ms={} cached_paths={}",
+            prefetchElapsed.count(), m_cachedPathArt.size());
 }
 
 bool CMusicThumbLoader::LoadItem(CFileItem* pItem)
@@ -568,7 +663,16 @@ bool CMusicThumbLoader::FillThumb(CFileItem &item, bool folderThumbs /* = true *
   std::string thumb = GetCachedImage(item, "thumb");
   if (thumb.empty())
   {
+    const auto userThumbStart = std::chrono::steady_clock::now();
     thumb = item.GetUserMusicThumb(false, folderThumbs);
+    const auto userThumbElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - userThumbStart);
+    if (userThumbElapsed.count() >= 250)
+    {
+      CLog::Log(LOGINFO,
+                "[JJS-MUSIC-NAV] GetUserMusicThumb SLOW ms={} folder_thumbs={} item='{}'",
+                userThumbElapsed.count(), folderThumbs, item.GetPath());
+    }
     if (!thumb.empty())
     {
       SetCachedImage(item, "thumb", thumb);
@@ -606,6 +710,7 @@ bool CMusicThumbLoader::FillLibraryArt(CFileItem &item)
      node do not) so check for song/album/artist specifically.
      Non-library songs (file view) can also have MusicInfoTag but no ID or type
   */
+  const auto fillStart = std::chrono::steady_clock::now();
   bool artfound(false);
   std::vector<ArtForThumbLoader> art;
   CMusicInfoTag &tag = *item.GetMusicInfoTag();
@@ -717,6 +822,15 @@ bool CMusicThumbLoader::FillLibraryArt(CFileItem &item)
 
   if (artfound)
     ApplyLibraryArt(item, art);
+
+  const auto fillElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - fillStart);
+  if (fillElapsed.count() >= 250)
+  {
+    CLog::Log(LOGINFO,
+              "[JJS-MUSIC-NAV] FillLibraryArt SLOW ms={} type='{}' id={} item='{}'",
+              fillElapsed.count(), tag.GetType(), tag.GetDatabaseId(), item.GetPath());
+  }
 
   return artfound;
 }
