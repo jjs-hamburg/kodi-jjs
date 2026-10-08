@@ -58,11 +58,16 @@ In addition to the gapless RAW / TrueHD / Atmos work, Kodi JJS carries a small s
   **Cause:** Kodi used an inefficient serial refresh routine: after loading the artist list it performed a separate artwork database query for every single artist, even though the image files themselves were already cached locally.  
   **Solution:** Kodi JJS batch-loads all artist-to-artwork mappings together with the artist result set. This removes the serial database round trips while keeping Kodi's existing artwork fallback behaviour unchanged.
 
+- **Slow music-folder artwork/cache refresh corrected – JJS.010**  
+  **Problem:** Opening or returning to large music file/folder views could spend unnecessary time resolving artwork and cached folder images item by item.  
+  **Cause:** The music thumb loader repeated library-art and path-cache lookups for individual items even though the complete folder item list was already available at loader start.  
+  **Solution:** Kodi JJS prefetches artist/album/song library artwork and cached path thumb/fanart mappings in batches for the complete visible item set. Successful misses are cached as well, so Kodi does not repeat per-item lookups for paths with no cached artwork.
+
 ### Current release
 
-**Kodi JJS 21.3-JJS.009 – Android ARM64 / LibreELEC Generic x86_64 / LibreELEC Raspberry Pi 4**
+**Kodi JJS 21.3-JJS.010 – Android ARM64 / LibreELEC Generic x86_64 / LibreELEC Raspberry Pi 4**
 
-[Download the current release](https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.009)
+[Download the current release](https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.010)
 
 The Android build uses its own package name, **`org.jjs.kodi`**, so it can be installed **in parallel with standard Kodi**.
 
@@ -89,7 +94,7 @@ Because Kodi JJS uses a separate Android package, the existing Kodi installation
 
 ### LibreELEC
 
-JJS.009 provides LibreELEC 12.2.1 builds for **Generic x86_64** and **Raspberry Pi 4 (aarch64)**.
+JJS.010 provides LibreELEC 12.2.1 builds for **Generic x86_64** and **Raspberry Pi 4 (aarch64)**.
 
 Before installing a JJS LibreELEC TAR:
 
@@ -160,7 +165,7 @@ This is what allows Kodi JJS and official Kodi (`org.xbmc.kodi`) to coexist on t
 
 The JJS audio changes are in Kodi core and are not specific to NVIDIA Shield hardware.
 
-JJS.009 source commit: **`442f3ecace492765b2014b1249ec97d81c180c59`**
+JJS.010 source commit: **`f5cbef54a2d04807e35441b9fe84eaacbb4b3b6c`**
 
 For a more detailed technical description, see **[README.JJS.md](README.JJS.md)**.
 
