@@ -167,66 +167,33 @@ jobs:
           path = Path("kodi/xbmc/filesystem/NFSFile.cpp")
           text = path.read_text()
 
-          old = '''  //write as long as some bytes are left to be written
-          while( leftBytes )
-          {
-            //the last chunk could be smalle than chunksize
-            if(leftBytes < chunkSize)
-            {
-              chunkSize = leftBytes;//write last chunk with correct size
-            }
-          #ifdef LIBNFS_API_V2
-            writtenBytes = nfs_write(m_pNfsContext, m_pFileHandle,
-                                     static_cast<const char*>(lpBuf) + numberOfBytesWritten, chunkSize);
-          #else
-            //write chunk
-            //! @bug libnfs < 2.0.0 isn't const correct
-            writtenBytes = nfs_write(m_pNfsContext,
-                                          m_pFileHandle,
-                                          chunkSize,
-                                          const_cast<char*>((const char *)lpBuf) + numberOfBytesWritten);
-          #endif
-            //decrease left bytes
-          '''
+          marker_loop = "  //write as long as some bytes are left to be written\n  while( leftBytes )"
+          if marker_loop not in text:
+              raise SystemExit("write loop marker not found")
+          text = text.replace(marker_loop,
+              "  uint64_t writeSequence = 0;\n\n" + marker_loop, 1)
 
-          new = '''  uint64_t writeSequence = 0;
+          marker_call = "#ifdef LIBNFS_API_V2\n    writtenBytes = nfs_write(m_pNfsContext, m_pFileHandle,"
+          if marker_call not in text:
+              raise SystemExit("nfs_write call marker not found")
+          enter = '''    ++writeSequence;
+    CLog::Log(LOGINFO,
+              "[JJS NFS DIAG] WRITE ENTER #{} context={} chunk={} call_written={} left={} file={}",
+              writeSequence, reinterpret_cast<uintptr_t>(m_pNfsContext), chunkSize,
+              numberOfBytesWritten, leftBytes, m_url.GetFileName());
+'''
+          text = text.replace(marker_call, enter + marker_call, 1)
 
-          //write as long as some bytes are left to be written
-          while( leftBytes )
-          {
-            //the last chunk could be smalle than chunksize
-            if(leftBytes < chunkSize)
-            {
-              chunkSize = leftBytes;//write last chunk with correct size
-            }
-
-            ++writeSequence;
-            CLog::Log(LOGINFO,
-                      "[JJS NFS DIAG] WRITE ENTER #{} context={} chunk={} call_written={} left={} file={}",
-                      writeSequence, reinterpret_cast<uintptr_t>(m_pNfsContext), chunkSize,
-                      numberOfBytesWritten, leftBytes, m_url.GetFileName());
-          #ifdef LIBNFS_API_V2
-            writtenBytes = nfs_write(m_pNfsContext, m_pFileHandle,
-                                     static_cast<const char*>(lpBuf) + numberOfBytesWritten, chunkSize);
-          #else
-            //write chunk
-            //! @bug libnfs < 2.0.0 isn't const correct
-            writtenBytes = nfs_write(m_pNfsContext,
-                                          m_pFileHandle,
-                                          chunkSize,
-                                          const_cast<char*>((const char *)lpBuf) + numberOfBytesWritten);
-          #endif
-            CLog::Log(LOGINFO,
-                      "[JJS NFS DIAG] WRITE EXIT #{} context={} result={} call_written={} left={} file={}",
-                      writeSequence, reinterpret_cast<uintptr_t>(m_pNfsContext), writtenBytes,
-                      numberOfBytesWritten, leftBytes, m_url.GetFileName());
-            //decrease left bytes
-          '''
-
-          if old not in text:
-              raise SystemExit("expected CNFSFile::Write block not found")
-
-          text = text.replace(old, new, 1)
+          marker_exit = "#endif\n    //decrease left bytes"
+          if marker_exit not in text:
+              raise SystemExit("nfs_write exit marker not found")
+          exit_log = '''#endif
+    CLog::Log(LOGINFO,
+              "[JJS NFS DIAG] WRITE EXIT #{} context={} result={} call_written={} left={} file={}",
+              writeSequence, reinterpret_cast<uintptr_t>(m_pNfsContext), writtenBytes,
+              numberOfBytesWritten, leftBytes, m_url.GetFileName());
+    //decrease left bytes'''
+          text = text.replace(marker_exit, exit_log, 1)
 
           if '#include <cstdint>' not in text:
               text = text.replace('#include <inttypes.h>\n', '#include <cstdint>\n#include <inttypes.h>\n', 1)
