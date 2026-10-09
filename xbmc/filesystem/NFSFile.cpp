@@ -518,8 +518,8 @@ int CNfsConnection::stat(const CURL& url, nfs_stat_64* statbuff)
       }
       else
       {
-        CLog::Log(LOGERROR, "NFS: Failed to mount nfs share: {} ({})", exportPath,
-                  nfs_get_error(m_pNfsContext));
+        CLog::Log(LOGERROR, "NFS: Failed to mount nfs share: {} ({})",
+                  exportPath, nfs_get_error(m_pNfsContext));
       }
 
       nfs_destroy_context(pTmpContext);
@@ -833,12 +833,28 @@ ssize_t CNFSFile::Write(const void* lpBuf, size_t uiBufSize)
   size_t numberOfBytesWritten = 0;
   int writtenBytes = 0;
   size_t leftBytes = uiBufSize;
-  //clamp max write chunksize to 32kb - fixme - this might be superfluous with future libnfs versions
-  size_t chunkSize = gNfsConnection.GetMaxWriteChunkSize() > 32768 ? 32768 : (size_t)gNfsConnection.GetMaxWriteChunkSize();
 
   std::unique_lock<CCriticalSection> lock(gNfsConnection);
 
-  if (m_pFileHandle == NULL || m_pNfsContext == NULL) return -1;
+  if (m_pFileHandle == NULL || m_pNfsContext == NULL)
+    return -1;
+
+  uint64_t maxWriteChunkSize = nfs_get_writemax(m_pNfsContext);
+  const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+  const uint64_t configuredChunkSize =
+      settings ? (settings->GetInt(SETTING_NFS_CHUNKSIZE) * 1024) : (128 * 1024);
+
+  if (maxWriteChunkSize == 0 || configuredChunkSize < maxWriteChunkSize)
+    maxWriteChunkSize = configuredChunkSize;
+
+  // clamp max write chunksize to 32kb - fixme - this might be superfluous with future libnfs versions
+  size_t chunkSize = maxWriteChunkSize > 32768 ? 32768 : static_cast<size_t>(maxWriteChunkSize);
+  if (chunkSize == 0)
+  {
+    CLog::Log(LOGERROR, "Failed to pwrite({}) - invalid NFS write chunk size 0",
+              m_url.GetFileName());
+    return -1;
+  }
 
   //write as long as some bytes are left to be written
   while( leftBytes )
@@ -859,21 +875,31 @@ ssize_t CNFSFile::Write(const void* lpBuf, size_t uiBufSize)
                                   chunkSize,
                                   const_cast<char*>((const char *)lpBuf) + numberOfBytesWritten);
 #endif
-    //decrease left bytes
-    leftBytes-= writtenBytes;
-    //increase overall written bytes
-    numberOfBytesWritten += writtenBytes;
 
-    //danger - something went wrong
-    if (writtenBytes < 0)
+    //danger - something went wrong or no forward progress was made
+    if (writtenBytes <= 0)
     {
-      CLog::Log(LOGERROR, "Failed to pwrite({}) {}", m_url.GetFileName(),
-                nfs_get_error(m_pNfsContext));
+      if (writtenBytes < 0)
+      {
+        CLog::Log(LOGERROR, "Failed to pwrite({}) {}", m_url.GetFileName(),
+                  nfs_get_error(m_pNfsContext));
+      }
+      else
+      {
+        CLog::Log(LOGERROR, "Failed to pwrite({}) - NFS write returned 0 bytes",
+                  m_url.GetFileName());
+      }
+
       if (numberOfBytesWritten == 0)
         return -1;
 
       break;
     }
+
+    //decrease left bytes
+    leftBytes -= writtenBytes;
+    //increase overall written bytes
+    numberOfBytesWritten += writtenBytes;
   }
   //return total number of written bytes
   return numberOfBytesWritten;
