@@ -1,0 +1,49 @@
+name: Prepare JJS.011 LibreELEC x86_64 workflow
+
+on:
+  push:
+    branches:
+      - build/21.3-jjs-011-libreelec
+    paths:
+      - ".github/workflows/prepare-jjs-011-libreelec.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Update proven JJS.010 workflow for JJS.011
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('.github/workflows/jjs-libreelec-12.2.1-test.yml')
+          s = p.read_text()
+          replacements = {
+              'build/21.3-jjs-010-libreelec': 'build/21.3-jjs-011-libreelec',
+              'f5cbef54a2d04807e35441b9fe84eaacbb4b3b6c': '51e9fccfb8fdfd3eb0601a29f249d86424dd0fbe',
+              'JJS.010': 'JJS.011',
+          }
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f'expected marker missing: {old}')
+              s = s.replace(old, new)
+          anchor = '            xbmc/interfaces/legacy/Dialog.cpp \\\n'
+          if s.count(anchor) != 2:
+              raise SystemExit(f'expected two functional patch anchors, found {s.count(anchor)}')
+          s = s.replace(anchor, '            xbmc/filesystem/NFSFile.cpp \\\n' + anchor)
+          p.write_text(s)
+          PY
+          git diff --check
+          git diff -- .github/workflows/jjs-libreelec-12.2.1-test.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/jjs-libreelec-12.2.1-test.yml
+          git commit -m "Build LibreELEC x86_64 JJS.011 with validated NFS fix"
+          git push
