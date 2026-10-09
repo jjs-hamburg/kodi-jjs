@@ -56,12 +56,18 @@ In addition to the gapless RAW / TrueHD / Atmos work, Kodi JJS carries a small s
 - **Slow artist-picture refresh corrected – JJS.009**  
   **Problem:** Returning to a music artist view could visibly reload artist pictures one after another and take many seconds with large libraries, especially with a central MariaDB/MySQL database.  
   **Cause:** Kodi used an inefficient serial refresh routine: after loading the artist list it performed a separate artwork database query for every single artist, even though the image files themselves were already cached locally.  
-  **Solution:** Kodi JJS batch-loads all artist-to-artwork mappings together with the artist result set. This removes the serial database round trips while keeping Kodi's existing artwork fallback behaviour unchanged.
+  **Solution:** JJS.009 introduced the first successful optimization by batch-loading all artist-to-artwork mappings together with the artist result set. This removes the serial database round trips while keeping Kodi's existing artwork fallback behaviour unchanged.
 
-- **Slow music-folder artwork/cache refresh corrected – JJS.010**  
-  **Problem:** Opening or returning to large music file/folder views could spend unnecessary time resolving artwork and cached folder images item by item.  
-  **Cause:** The music thumb loader repeated library-art and path-cache lookups for individual items even though the complete folder item list was already available at loader start.  
-  **Solution:** Kodi JJS prefetches artist/album/song library artwork and cached path thumb/fanart mappings in batches for the complete visible item set. Successful misses are cached as well, so Kodi does not repeat per-item lookups for paths with no cached artwork.
+- **Music-wide cache and artwork optimization – JJS.010**  
+  **Problem:** The successful JJS.009 optimization only covered the originally identified artist-view path; other music file/folder operations could still spend unnecessary time resolving artwork and cached images item by item.  
+  **Cause:** Music browsing still repeated library-art and path-cache lookups for individual items even though the complete item list was already available at loader start.  
+  **Solution:** JJS.010 extends the successful JJS.009 approach across all music-file operations. Artist, album and song artwork plus cached path thumb/fanart mappings are prefetched for the complete item set, and successful misses are cached as well. **The result is dramatically improved access to already cached artwork and images**, substantially reducing repeated filesystem, artwork and database work while browsing large music libraries.
+
+- **NFS file-operation freeze fixed – JJS.011**  
+  **Important:** This was a bug in standard Kodi, not a Kodi JJS regression. The same freeze was reproduced with unmodified standard Kodi.  
+  **Problem:** Kodi could freeze completely during NFS file operations when an active file write overlapped with access to another NFS export.  
+  **Cause:** `CNFSFile::Write()` used a global write-chunk size which could temporarily become zero while another thread switched the active NFS context. A zero-length `nfs_write()` then returned zero bytes, while Kodi's write loop made no forward progress and continued indefinitely while holding the global NFS lock.  
+  **Solution:** JJS.011 obtains the write limit from the NFS context belonging to the open file while holding the connection lock. Zero-length and zero-progress writes are explicitly rejected, preventing the condition from turning into an infinite loop.
 
 ### Current release
 
