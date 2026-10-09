@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - build/21.3-jjs-010-android
+      - build/21.3-jjs-011-android
 
 permissions:
   contents: read
@@ -16,18 +16,18 @@ jobs:
 
     env:
       KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
-      KODI_REF: release/jjs010-music-browser-cache
-      EXPECTED_KODI_COMMIT: f5cbef54a2d04807e35441b9fe84eaacbb4b3b6c
+      KODI_REF: release/jjs011-nfs-write-context-race
+      EXPECTED_KODI_COMMIT: 51e9fccfb8fdfd3eb0601a29f249d86424dd0fbe
       EXPECTED_INTERNAL_APP_NAME: Kodi
       SOURCE_DISPLAY_NAME: Kodi JJS
       SOURCE_PACKAGE: org.jjs.kodi
       EXPECTED_DISPLAY_NAME: Kodi JJS
       EXPECTED_PACKAGE: org.jjs.kodi
       EXPECTED_VERSION_CODE: "2103000"
-      EXPECTED_VERSION_NAME: "21.3-JJS.010"
-      JJS_BUILD: "010"
-      JJS_VERSION_TAG: "JJS.010"
-      JJS_ARTIFACT_NAME: Kodi-JJS-21.3-JJS.010-arm64
+      EXPECTED_VERSION_NAME: "21.3-JJS.011"
+      JJS_BUILD: "011"
+      JJS_VERSION_TAG: "JJS.011"
+      JJS_ARTIFACT_NAME: Kodi-JJS-21.3-JJS.011-arm64
       EXPECTED_SIGNING_CERT_SHA256: caddfcba2d9ad9b880d410a048dd19c5212e2994669f226724250439a20840c6
       ANDROID_NDK_VERSION: 21.4.7075529
       ANDROID_BUILD_TOOLS_VERSION: 33.0.1
