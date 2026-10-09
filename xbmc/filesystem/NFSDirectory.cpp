@@ -249,20 +249,37 @@ bool CNFSDirectory::GetDirectory(const CURL& url, CFileItemList &items)
             reinterpret_cast<uintptr_t>(openedContext), reinterpret_cast<uintptr_t>(nfsdir));
   lock.unlock();
 
+  uint64_t readdirCall = 0;
   while(true)
   {
+    ++readdirCall;
     struct nfs_context* const currentContext = gNfsConnection.GetNfsContext();
     if (currentContext != openedContext)
     {
       CLog::Log(LOGERROR,
-                "[JJS NFS DIAG] CONTEXT SWITCH before readdir path={} opened_context={} current_context={} dir={}",
-                strDirName, reinterpret_cast<uintptr_t>(openedContext),
+                "[JJS NFS DIAG] CONTEXT SWITCH before readdir #{} path={} opened_context={} current_context={} dir={}",
+                readdirCall, strDirName, reinterpret_cast<uintptr_t>(openedContext),
                 reinterpret_cast<uintptr_t>(currentContext), reinterpret_cast<uintptr_t>(nfsdir));
     }
 
+    CLog::Log(LOGINFO,
+              "[JJS NFS DIAG] readdir ENTER #{} path={} context={} dir={}",
+              readdirCall, strDirName, reinterpret_cast<uintptr_t>(currentContext),
+              reinterpret_cast<uintptr_t>(nfsdir));
     nfsdirent = nfs_readdir(currentContext, nfsdir);
     if (nfsdirent == NULL)
+    {
+      CLog::Log(LOGINFO,
+                "[JJS NFS DIAG] readdir EXIT #{} path={} context={} dir={} entry=<END>",
+                readdirCall, strDirName, reinterpret_cast<uintptr_t>(currentContext),
+                reinterpret_cast<uintptr_t>(nfsdir));
       break;
+    }
+
+    CLog::Log(LOGINFO,
+              "[JJS NFS DIAG] readdir EXIT #{} path={} context={} dir={} entry={}",
+              readdirCall, strDirName, reinterpret_cast<uintptr_t>(currentContext),
+              reinterpret_cast<uintptr_t>(nfsdir), nfsdirent->name);
 
     struct nfsdirent tmpDirent = *nfsdirent;
     std::string strName = tmpDirent.name;
