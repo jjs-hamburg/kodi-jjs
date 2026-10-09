@@ -1,0 +1,139 @@
+diff --git a/xbmc/filesystem/NFSFile.cpp b/xbmc/filesystem/NFSFile.cpp
+--- a/xbmc/filesystem/NFSFile.cpp
++++ b/xbmc/filesystem/NFSFile.cpp
+@@ -267,7 +267,12 @@ bool CNfsConnection::Connect(const CURL& url, std::string &relativePath)
+ {
++  CLog::Log(LOGINFO, "[JJS NFS LOCK DIAG] CONNECT LOCK_WAIT url={} global_ctx={}", url.Get(),
++            static_cast<const void*>(m_pNfsContext));
+   std::unique_lock<CCriticalSection> lock(*this);
++  CLog::Log(LOGINFO, "[JJS NFS LOCK DIAG] CONNECT LOCK_ACQUIRED url={} global_ctx={}",
++            url.Get(), static_cast<const void*>(m_pNfsContext));
++
+   int nfsRet = 0;
+   std::string exportPath;
+@@ -294,7 +299,13 @@ bool CNfsConnection::Connect(const CURL& url, std::string &relativePath)
+     if (contextRet == CNfsConnection::ContextStatus::NEW)
+     {
+       //we connect to the directory of the path. This will be the "root" path of this connection then.
+       //So all fileoperations are relative to this mountpoint...
++      CLog::Log(LOGINFO,
++                "[JJS NFS LOCK DIAG] CONNECT MOUNT_ENTER export={} ctx={}", exportPath,
++                static_cast<const void*>(m_pNfsContext));
+       nfsRet = nfs_mount(m_pNfsContext, m_resolvedHostName.c_str(), exportPath.c_str());
++      CLog::Log(LOGINFO,
++                "[JJS NFS LOCK DIAG] CONNECT MOUNT_EXIT export={} ctx={} ret={}", exportPath,
++                static_cast<const void*>(m_pNfsContext), nfsRet);
+ 
+       if(nfsRet != 0)
+       {
+@@ -643,7 +654,12 @@ bool CNFSFile::Open(const CURL& url)
+ 
+   std::string filename;
+ 
++  CLog::Log(LOGINFO, "[JJS NFS LOCK DIAG] OPEN LOCK_WAIT file={}", url.GetFileName());
+   std::unique_lock<CCriticalSection> lock(gNfsConnection);
++  CLog::Log(LOGINFO, "[JJS NFS LOCK DIAG] OPEN LOCK_ACQUIRED file={}", url.GetFileName());
+ 
+   if (!gNfsConnection.Connect(url, filename))
+     return false;
+@@ -652,7 +668,12 @@ bool CNFSFile::Open(const CURL& url)
+   m_pNfsContext = gNfsConnection.GetNfsContext();
+   m_exportPath = gNfsConnection.GetContextMapId();
+ 
++  CLog::Log(LOGINFO, "[JJS NFS LOCK DIAG] OPEN LIBNFS_ENTER file={} ctx={}",
++            url.GetFileName(), static_cast<const void*>(m_pNfsContext));
+   int ret = nfs_open(m_pNfsContext, filename.c_str(), O_RDONLY, &m_pFileHandle);
++  CLog::Log(LOGINFO, "[JJS NFS LOCK DIAG] OPEN LIBNFS_EXIT file={} ctx={} ret={}",
++            url.GetFileName(), static_cast<const void*>(m_pNfsContext), ret);
+ 
+   if (ret == NFS4ERR_EXPIRED) // client session expired due no activity/keep alive
+   {
+@@ -819,7 +840,15 @@ ssize_t CNFSFile::Write(const void* lpBuf, size_t uiBufSize)
+   int writtenBytes = 0;
+   size_t leftBytes = uiBufSize;
+ 
++  CLog::Log(LOGINFO,
++            "[JJS NFS LOCK DIAG] WRITE LOCK_WAIT file={} bytes={} ctx={} fh={}",
++            m_url.GetFileName(), uiBufSize, static_cast<const void*>(m_pNfsContext),
++            static_cast<const void*>(m_pFileHandle));
+   std::unique_lock<CCriticalSection> lock(gNfsConnection);
++  CLog::Log(LOGINFO,
++            "[JJS NFS LOCK DIAG] WRITE LOCK_ACQUIRED file={} bytes={} ctx={} fh={}",
++            m_url.GetFileName(), uiBufSize, static_cast<const void*>(m_pNfsContext),
++            static_cast<const void*>(m_pFileHandle));
+ 
+   if (m_pFileHandle == NULL || m_pNfsContext == NULL)
+     return -1;
+@@ -875,6 +904,10 @@ ssize_t CNFSFile::Write(const void* lpBuf, size_t uiBufSize)
+     //increase overall written bytes
+     numberOfBytesWritten += writtenBytes;
+   }
++  CLog::Log(LOGINFO,
++            "[JJS NFS LOCK DIAG] WRITE COMPLETE file={} requested={} written={} ctx={} fh={}",
++            m_url.GetFileName(), uiBufSize, numberOfBytesWritten,
++            static_cast<const void*>(m_pNfsContext), static_cast<const void*>(m_pFileHandle));
+   //return total number of written bytes
+   return numberOfBytesWritten;
+ }
+@@ -934,7 +967,12 @@ bool CNFSFile::OpenForWrite(const CURL& url, bool bOverWrite)
+   if (!IsValidFile(url.GetFileName())) return false;
+ 
+   Close();
++  CLog::Log(LOGINFO, "[JJS NFS LOCK DIAG] OPEN_WRITE LOCK_WAIT file={} overwrite={}",
++            url.GetFileName(), bOverWrite);
+   std::unique_lock<CCriticalSection> lock(gNfsConnection);
++  CLog::Log(LOGINFO, "[JJS NFS LOCK DIAG] OPEN_WRITE LOCK_ACQUIRED file={} overwrite={}",
++            url.GetFileName(), bOverWrite);
+   std::string filename;
+ 
+   if(!gNfsConnection.Connect(url,filename))
+@@ -948,8 +986,15 @@ bool CNFSFile::OpenForWrite(const CURL& url, bool bOverWrite)
+     CLog::Log(LOGWARNING, "FileNFS::OpenForWrite() called with overwriting enabled! - {}",
+               filename);
+     //create file with proper permissions
++    CLog::Log(LOGINFO, "[JJS NFS LOCK DIAG] OPEN_WRITE CREAT_ENTER file={} ctx={}",
++              url.GetFileName(), static_cast<const void*>(m_pNfsContext));
+     ret = nfs_creat(m_pNfsContext, filename.c_str(), S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH, &m_pFileHandle);
++    CLog::Log(LOGINFO, "[JJS NFS LOCK DIAG] OPEN_WRITE CREAT_EXIT file={} ctx={} ret={}",
++              url.GetFileName(), static_cast<const void*>(m_pNfsContext), ret);
+     //if file was created the file handle isn't valid ... so close it and open later
+     if(ret == 0)
+     {
+diff --git a/xbmc/filesystem/NFSDirectory.cpp b/xbmc/filesystem/NFSDirectory.cpp
+--- a/xbmc/filesystem/NFSDirectory.cpp
++++ b/xbmc/filesystem/NFSDirectory.cpp
+@@ -204,7 +204,11 @@ bool CNFSDirectory::GetDirectory(const CURL& url, CFileItemList &items)
+   // We accept nfs://server/path[/file]]]]
+   int ret = 0;
+   KODI::TIME::FileTime fileTime, localTime;
++  CLog::Log(LOGINFO, "[JJS NFS LOCK DIAG] DIRECTORY LOCK_WAIT url={}", url.Get());
+   std::unique_lock<CCriticalSection> lock(gNfsConnection);
++  CLog::Log(LOGINFO, "[JJS NFS LOCK DIAG] DIRECTORY LOCK_ACQUIRED url={}", url.Get());
+   std::string strDirName="";
+   std::string myStrPath(url.Get());
+@@ -230,7 +234,12 @@ bool CNFSDirectory::GetDirectory(const CURL& url, CFileItemList &items)
+   struct nfsdir *nfsdir = NULL;
+   struct nfsdirent *nfsdirent = NULL;
+ 
++  CLog::Log(LOGINFO, "[JJS NFS LOCK DIAG] DIRECTORY OPENDIR_ENTER url={} ctx={}", url.Get(),
++            static_cast<const void*>(gNfsConnection.GetNfsContext()));
+   ret = nfs_opendir(gNfsConnection.GetNfsContext(), strDirName.c_str(), &nfsdir);
++  CLog::Log(LOGINFO, "[JJS NFS LOCK DIAG] DIRECTORY OPENDIR_EXIT url={} ctx={} ret={}",
++            url.Get(), static_cast<const void*>(gNfsConnection.GetNfsContext()), ret);
+ 
+   if(ret != 0)
+   {
+@@ -301,8 +310,14 @@ bool CNFSDirectory::GetDirectory(const CURL& url, CFileItemList &items)
+     }
+   }
+ 
++  CLog::Log(LOGINFO, "[JJS NFS LOCK DIAG] DIRECTORY CLOSE_LOCK_WAIT url={}", url.Get());
+   lock.lock();
++  CLog::Log(LOGINFO, "[JJS NFS LOCK DIAG] DIRECTORY CLOSE_LOCK_ACQUIRED url={}", url.Get());
++  CLog::Log(LOGINFO, "[JJS NFS LOCK DIAG] DIRECTORY CLOSEDIR_ENTER url={} ctx={}", url.Get(),
++            static_cast<const void*>(gNfsConnection.GetNfsContext()));
+   nfs_closedir(gNfsConnection.GetNfsContext(), nfsdir);//close the dir
++  CLog::Log(LOGINFO, "[JJS NFS LOCK DIAG] DIRECTORY CLOSEDIR_EXIT url={}", url.Get());
+   lock.unlock();
+   return true;
+ }
