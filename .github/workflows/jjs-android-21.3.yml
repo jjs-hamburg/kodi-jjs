@@ -170,29 +170,18 @@ jobs:
           marker_loop = "  //write as long as some bytes are left to be written\n  while( leftBytes )"
           if marker_loop not in text:
               raise SystemExit("write loop marker not found")
-          text = text.replace(marker_loop,
-              "  uint64_t writeSequence = 0;\n\n" + marker_loop, 1)
+          text = text.replace(marker_loop, "  uint64_t writeSequence = 0;\n\n" + marker_loop, 1)
 
           marker_call = "#ifdef LIBNFS_API_V2\n    writtenBytes = nfs_write(m_pNfsContext, m_pFileHandle,"
           if marker_call not in text:
               raise SystemExit("nfs_write call marker not found")
-          enter = '''    ++writeSequence;
-    CLog::Log(LOGINFO,
-              "[JJS NFS DIAG] WRITE ENTER #{} context={} chunk={} call_written={} left={} file={}",
-              writeSequence, reinterpret_cast<uintptr_t>(m_pNfsContext), chunkSize,
-              numberOfBytesWritten, leftBytes, m_url.GetFileName());
-'''
+          enter = "    ++writeSequence;\n    CLog::Log(LOGINFO,\n              \"[JJS NFS DIAG] WRITE ENTER #{} context={} chunk={} call_written={} left={} file={}\",\n              writeSequence, reinterpret_cast<uintptr_t>(m_pNfsContext), chunkSize,\n              numberOfBytesWritten, leftBytes, m_url.GetFileName());\n"
           text = text.replace(marker_call, enter + marker_call, 1)
 
           marker_exit = "#endif\n    //decrease left bytes"
           if marker_exit not in text:
               raise SystemExit("nfs_write exit marker not found")
-          exit_log = '''#endif
-    CLog::Log(LOGINFO,
-              "[JJS NFS DIAG] WRITE EXIT #{} context={} result={} call_written={} left={} file={}",
-              writeSequence, reinterpret_cast<uintptr_t>(m_pNfsContext), writtenBytes,
-              numberOfBytesWritten, leftBytes, m_url.GetFileName());
-    //decrease left bytes'''
+          exit_log = "#endif\n    CLog::Log(LOGINFO,\n              \"[JJS NFS DIAG] WRITE EXIT #{} context={} result={} call_written={} left={} file={}\",\n              writeSequence, reinterpret_cast<uintptr_t>(m_pNfsContext), writtenBytes,\n              numberOfBytesWritten, leftBytes, m_url.GetFileName());\n    //decrease left bytes"
           text = text.replace(marker_exit, exit_log, 1)
 
           if '#include <cstdint>' not in text:
