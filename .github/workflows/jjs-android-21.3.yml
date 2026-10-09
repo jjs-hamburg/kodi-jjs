@@ -17,7 +17,7 @@ jobs:
     env:
       KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
       KODI_REF: diag/jjs011-nfs-lock-trace
-      EXPECTED_KODI_COMMIT: 376b6100583d0f6c2db87e980c17deb67767171d
+      EXPECTED_KODI_COMMIT: 2fa17271a751762e4c92dd1a93305907b627e13b
       EXPECTED_INTERNAL_APP_NAME: Kodi
       SOURCE_DISPLAY_NAME: Kodi JJS
       SOURCE_PACKAGE: org.jjs.kodi
@@ -147,7 +147,7 @@ jobs:
           git -C kodi diff --check
           test -z "$(git -C kodi status --porcelain)"
 
-          git -C kodi apply tools/diagnostics/jjs011-nfs-lock-trace.patch
+          git -C kodi apply --recount tools/diagnostics/jjs011-nfs-lock-trace.patch
           git -C kodi diff --check
           git -C kodi diff --name-only | sort > "${RUNNER_TEMP}/diag-files.txt"
           printf '%s\n' \
