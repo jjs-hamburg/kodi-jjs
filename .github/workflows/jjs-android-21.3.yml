@@ -128,7 +128,7 @@ jobs:
 
           fetch_verified \
             "commons-text-1.13.0-bin.tar.gz" \
-            "https://archive.apache.org/dist/commons/lang/binaries/commons-lang3-3.17.0-bin.tar.gz" \
+            "https://archive.apache.org/dist/commons/text/binaries/commons-text-1.13.0-bin.tar.gz" \
             "a51667463e88b2d017c3baebb9bbe42c4e50cba96ffe19c89680e82002a4db8b9007daff75f8dbf8bf3725be13a3f03f3c2bc4e1f11e8e02dcab4408abdb44a1"
 
       - name: Fetch pinned Kodi JJS source
