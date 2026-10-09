@@ -1,10 +1,10 @@
-name: Build Kodi JJS 21.3 ARM64 APK - Music Nav Freeze Diagnostics
+name: Build Kodi JJS 21.3 ARM64 APK - NFS Context Race Diagnostics
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - build/test-jjs010-music-nav-freeze-diagnostics
+      - build/diag-nfs-context-race
 
 permissions:
   contents: read
@@ -16,18 +16,18 @@ jobs:
 
     env:
       KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
-      KODI_REF: test/jjs010-music-nav-freeze-diagnostics
-      EXPECTED_KODI_COMMIT: 1bc6cb85a29bef5ea92ef784310523f0047da61f
+      KODI_REF: diag/nfs-context-race
+      EXPECTED_KODI_COMMIT: 0bc4a8a3b194ce39d75e602725ce66cf37a1ee2d
       EXPECTED_INTERNAL_APP_NAME: Kodi
       SOURCE_DISPLAY_NAME: Kodi JJS
       SOURCE_PACKAGE: org.jjs.kodi
       EXPECTED_DISPLAY_NAME: Kodi JJS
       EXPECTED_PACKAGE: org.jjs.kodi
       EXPECTED_VERSION_CODE: "2103000"
-      EXPECTED_VERSION_NAME: "21.3-JJS.009"
-      JJS_BUILD: "009"
-      JJS_VERSION_TAG: "JJS.009"
-      JJS_ARTIFACT_NAME: Kodi-JJS-21.3-JJS.009-music-nav-freeze-diagnostics-arm64
+      EXPECTED_VERSION_NAME: "21.3-JJS.010"
+      JJS_BUILD: "010"
+      JJS_VERSION_TAG: "JJS.010"
+      JJS_ARTIFACT_NAME: Kodi-JJS-21.3-JJS.010-nfs-context-race-diagnostics-arm64
       EXPECTED_SIGNING_CERT_SHA256: caddfcba2d9ad9b880d410a048dd19c5212e2994669f226724250439a20840c6
       ANDROID_NDK_VERSION: 21.4.7075529
       ANDROID_BUILD_TOOLS_VERSION: 33.0.1
