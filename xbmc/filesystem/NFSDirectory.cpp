@@ -24,6 +24,7 @@
 #endif
 
 using namespace XFILE;
+#include <cstdint>
 #include <limits.h>
 #include <nfsc/libnfs.h>
 #include <nfsc/libnfs-raw-nfs.h>
@@ -230,8 +231,12 @@ bool CNFSDirectory::GetDirectory(const CURL& url, CFileItemList &items)
 
   struct nfsdir *nfsdir = NULL;
   struct nfsdirent *nfsdirent = NULL;
+  struct nfs_context* const openedContext = gNfsConnection.GetNfsContext();
 
-  ret = nfs_opendir(gNfsConnection.GetNfsContext(), strDirName.c_str(), &nfsdir);
+  CLog::Log(LOGINFO, "[JJS NFS DIAG] opendir path={} context={}", strDirName,
+            reinterpret_cast<uintptr_t>(openedContext));
+
+  ret = nfs_opendir(openedContext, strDirName.c_str(), &nfsdir);
 
   if(ret != 0)
   {
@@ -239,10 +244,26 @@ bool CNFSDirectory::GetDirectory(const CURL& url, CFileItemList &items)
               nfs_get_error(gNfsConnection.GetNfsContext()));
     return false;
   }
+
+  CLog::Log(LOGINFO, "[JJS NFS DIAG] opendir success path={} context={} dir={}", strDirName,
+            reinterpret_cast<uintptr_t>(openedContext), reinterpret_cast<uintptr_t>(nfsdir));
   lock.unlock();
 
-  while((nfsdirent = nfs_readdir(gNfsConnection.GetNfsContext(), nfsdir)) != NULL)
+  while(true)
   {
+    struct nfs_context* const currentContext = gNfsConnection.GetNfsContext();
+    if (currentContext != openedContext)
+    {
+      CLog::Log(LOGERROR,
+                "[JJS NFS DIAG] CONTEXT SWITCH before readdir path={} opened_context={} current_context={} dir={}",
+                strDirName, reinterpret_cast<uintptr_t>(openedContext),
+                reinterpret_cast<uintptr_t>(currentContext), reinterpret_cast<uintptr_t>(nfsdir));
+    }
+
+    nfsdirent = nfs_readdir(currentContext, nfsdir);
+    if (nfsdirent == NULL)
+      break;
+
     struct nfsdirent tmpDirent = *nfsdirent;
     std::string strName = tmpDirent.name;
     std::string path(myStrPath + strName);
@@ -306,7 +327,20 @@ bool CNFSDirectory::GetDirectory(const CURL& url, CFileItemList &items)
   }
 
   lock.lock();
-  nfs_closedir(gNfsConnection.GetNfsContext(), nfsdir);//close the dir
+  struct nfs_context* const closeContext = gNfsConnection.GetNfsContext();
+  if (closeContext != openedContext)
+  {
+    CLog::Log(LOGERROR,
+              "[JJS NFS DIAG] CONTEXT SWITCH before closedir path={} opened_context={} current_context={} dir={}",
+              strDirName, reinterpret_cast<uintptr_t>(openedContext),
+              reinterpret_cast<uintptr_t>(closeContext), reinterpret_cast<uintptr_t>(nfsdir));
+  }
+  else
+  {
+    CLog::Log(LOGINFO, "[JJS NFS DIAG] closedir path={} context={} dir={}", strDirName,
+              reinterpret_cast<uintptr_t>(closeContext), reinterpret_cast<uintptr_t>(nfsdir));
+  }
+  nfs_closedir(closeContext, nfsdir);//close the dir
   lock.unlock();
   return true;
 }
