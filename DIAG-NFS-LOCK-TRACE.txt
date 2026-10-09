@@ -1,0 +1,3 @@
+JJS.011 NFS lock trace diagnostic build wrapper.
+Source: diag/jjs011-nfs-lock-trace
+Diagnostic patch: tools/diagnostics/jjs011-nfs-lock-trace.patch
