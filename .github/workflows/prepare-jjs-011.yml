@@ -1,0 +1,96 @@
+name: Prepare Kodi JJS.011 build branches
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/prepare-jjs-011.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update JJS.011 build workflows from proven JJS.010 branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          SOURCE_COMMIT="51e9fccfb8fdfd3eb0601a29f249d86424dd0fbe"
+          OLD_SOURCE_COMMIT="f5cbef54a2d04807e35441b9fe84eaacbb4b3b6c"
+
+          configure_git() {
+            git -C "$1" config user.name "github-actions[bot]"
+            git -C "$1" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          }
+
+          git clone --depth 1 --branch build/21.3-jjs-011-android "$REPO_URL" android
+          configure_git android
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/.github/workflows/jjs-android-21.3.yml")
+          s = p.read_text()
+          replacements = {
+              "build/21.3-jjs-010-android": "build/21.3-jjs-011-android",
+              "release/jjs010-music-browser-cache": "release/jjs011-nfs-write-context-race",
+              "f5cbef54a2d04807e35441b9fe84eaacbb4b3b6c": "51e9fccfb8fdfd3eb0601a29f249d86424dd0fbe",
+              "JJS.010": "JJS.011",
+          }
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f"Android expected marker missing: {old}")
+              s = s.replace(old, new)
+          p.write_text(s)
+          PY
+          git -C android diff --check
+          git -C android diff -- .github/workflows/jjs-android-21.3.yml
+          git -C android add .github/workflows/jjs-android-21.3.yml
+          git -C android commit -m "Build Android JJS.011 from validated NFS fix"
+          git -C android push origin HEAD:build/21.3-jjs-011-android
+
+          prepare_le() {
+            local branch="$1"
+            local dir="$2"
+            git clone --depth 1 --branch "$branch" "$REPO_URL" "$dir"
+            configure_git "$dir"
+            BRANCH="$branch" DIR="$dir" python3 - <<'PY'
+          import os
+          from pathlib import Path
+          branch = os.environ["BRANCH"]
+          d = os.environ["DIR"]
+          p = Path(d) / ".github/workflows/jjs-libreelec-12.2.1-test.yml"
+          s = p.read_text()
+          old_branch = branch.replace("jjs-011", "jjs-010")
+          if old_branch not in s:
+              raise SystemExit(f"LibreELEC expected branch marker missing: {old_branch}")
+          s = s.replace(old_branch, branch)
+          old_commit = "f5cbef54a2d04807e35441b9fe84eaacbb4b3b6c"
+          new_commit = "51e9fccfb8fdfd3eb0601a29f249d86424dd0fbe"
+          if old_commit not in s:
+              raise SystemExit("LibreELEC expected JJS.010 source commit missing")
+          s = s.replace(old_commit, new_commit)
+          if "JJS.010" not in s:
+              raise SystemExit("LibreELEC JJS.010 markers missing")
+          s = s.replace("JJS.010", "JJS.011")
+          anchor = "            xbmc/interfaces/legacy/Dialog.cpp \\\n"
+          count = s.count(anchor)
+          if count != 2:
+              raise SystemExit(f"Expected two functional patch file-list anchors, found {count}")
+          s = s.replace(anchor, "            xbmc/filesystem/NFSFile.cpp \\\n" + anchor)
+          p.write_text(s)
+          PY
+            git -C "$dir" diff --check
+            git -C "$dir" diff -- .github/workflows/jjs-libreelec-12.2.1-test.yml
+            git -C "$dir" add .github/workflows/jjs-libreelec-12.2.1-test.yml
+            git -C "$dir" commit -m "Build LibreELEC JJS.011 with validated NFS fix"
+            git -C "$dir" push origin "HEAD:${branch}"
+          }
+
+          prepare_le build/21.3-jjs-011-libreelec x64
+          prepare_le build/21.3-jjs-011-rpi4 rpi4
