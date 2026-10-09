@@ -1,10 +1,10 @@
-name: Build Kodi JJS 21.3 ARM64 APK - NFS Context Race Diagnostics
+name: Build Kodi JJS 21.3 ARM64 APK - NFS Write Context Race Fix
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - build/diag-nfs-context-race
+      - build/test-nfs-write-context-race-fix
 
 permissions:
   contents: read
@@ -16,8 +16,8 @@ jobs:
 
     env:
       KODI_REPO: https://github.com/jjs-hamburg/kodi-jjs.git
-      KODI_REF: diag/nfs-context-race
-      EXPECTED_KODI_COMMIT: e877d5d294b35e417ae2fec2ac9da09c2a699706
+      KODI_REF: fix/nfs-write-context-race
+      EXPECTED_KODI_COMMIT: 5b11b7582e08fdba742135b24d01f72d9885eed5
       EXPECTED_INTERNAL_APP_NAME: Kodi
       SOURCE_DISPLAY_NAME: Kodi JJS
       SOURCE_PACKAGE: org.jjs.kodi
@@ -27,7 +27,7 @@ jobs:
       EXPECTED_VERSION_NAME: "21.3-JJS.010"
       JJS_BUILD: "010"
       JJS_VERSION_TAG: "JJS.010"
-      JJS_ARTIFACT_NAME: Kodi-JJS-21.3-JJS.010-nfs-context-race-diagnostics-arm64
+      JJS_ARTIFACT_NAME: Kodi-JJS-21.3-JJS.010-nfs-write-context-race-fix-arm64
       EXPECTED_SIGNING_CERT_SHA256: caddfcba2d9ad9b880d410a048dd19c5212e2994669f226724250439a20840c6
       ANDROID_NDK_VERSION: 21.4.7075529
       ANDROID_BUILD_TOOLS_VERSION: 33.0.1
@@ -128,7 +128,7 @@ jobs:
 
           fetch_verified \
             "commons-text-1.13.0-bin.tar.gz" \
-            "https://archive.apache.org/dist/commons/text/binaries/commons-text-1.13.0-bin.tar.gz" \
+            "https://archive.apache.org/dist/commons/lang/binaries/commons-lang3-3.17.0-bin.tar.gz" \
             "a51667463e88b2d017c3baebb9bbe42c4e50cba96ffe19c89680e82002a4db8b9007daff75f8dbf8bf3725be13a3f03f3c2bc4e1f11e8e02dcab4408abdb44a1"
 
       - name: Fetch pinned Kodi JJS source
