@@ -296,7 +296,7 @@ jobs:
 
           seen = set()
           for step in plan:
-              package = step["name"].split(": 1)[0]
+              package = step["name"].split(":", 1)[0]
               if package not in seen:
                   seen.add(package)
                   print(package)
