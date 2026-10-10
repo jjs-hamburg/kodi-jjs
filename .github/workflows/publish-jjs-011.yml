@@ -1,0 +1,168 @@
+name: Publish Kodi JJS 21.3-JJS.011
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/publish-jjs-011.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_RUN_ID: "37969162454"
+      ANDROID_HEAD_SHA: "ba839daaa94a5dce908a52f5879a4b9098dede08"
+      ANDROID_BRANCH: "build/21.3-jjs-011-android"
+      ANDROID_ARTIFACT_ID: "11637916598"
+      X64_RUN_ID: "37971940043"
+      X64_HEAD_SHA: "359264b0874aa1ca620337ba0666e9981223ec07"
+      X64_BRANCH: "build/21.3-jjs-011-libreelec"
+      X64_ARTIFACT_ID: "11656823456"
+      RPI4_RUN_ID: "37971951059"
+      RPI4_HEAD_SHA: "328abc68947168e00a0d50aed732124f34e75dbf"
+      RPI4_BRANCH: "build/21.3-jjs-011-rpi4"
+      RPI4_ARTIFACT_ID: "11648537896"
+      SOURCE_COMMIT: "51e9fccfb8fdfd3eb0601a29f249d86424dd0fbe"
+      RELEASE_TAG: "v21.3-JJS.011"
+      RELEASE_TITLE: "Kodi JJS 21.3-JJS.011 – Android ARM64 / LibreELEC x86_64 / Raspberry Pi 4"
+
+    steps:
+      - name: Verify exact successful build runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          check_run() {
+            local run_id="$1" expected_sha="$2" expected_branch="$3" label="$4"
+            local json
+            json="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}")"
+            test "$(jq -r '.status' <<<"$json")" = "completed"
+            test "$(jq -r '.conclusion' <<<"$json")" = "success"
+            test "$(jq -r '.head_sha' <<<"$json")" = "$expected_sha"
+            test "$(jq -r '.head_branch' <<<"$json")" = "$expected_branch"
+            echo "$label verified: run $run_id"
+          }
+          check_run "$ANDROID_RUN_ID" "$ANDROID_HEAD_SHA" "$ANDROID_BRANCH" "Android ARM64"
+          check_run "$X64_RUN_ID" "$X64_HEAD_SHA" "$X64_BRANCH" "LibreELEC x86_64"
+          check_run "$RPI4_RUN_ID" "$RPI4_HEAD_SHA" "$RPI4_BRANCH" "LibreELEC RPi4"
+
+      - name: Download exact build artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for spec in "android:$ANDROID_ARTIFACT_ID" "x64:$X64_ARTIFACT_ID" "rpi4:$RPI4_ARTIFACT_ID"; do
+            dir="${spec%%:*}"
+            id="${spec##*:}"
+            mkdir "$dir"
+            gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > "$dir.zip"
+            unzip -q "$dir.zip" -d "$dir"
+            find "$dir" -type f -printf '%P\n' | sort
+          done
+
+      - name: Verify JJS.011 release payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f android/BUILD-INFO.txt
+          test -f android/SHA256SUMS.txt
+          test -f android/AAPT-BADGING.txt
+          test -f android/APKSIGNER-VERIFY.txt
+          APK="$(find android -maxdepth 1 -type f -name 'Kodi-JJS-21.3-JJS.011-*-arm64.apk' -print -quit)"
+          test -n "$APK"
+          grep -Fq "Kodi source commit: ${SOURCE_COMMIT}" android/BUILD-INFO.txt
+          grep -Fq "Kodi JJS version tag: JJS.011" android/BUILD-INFO.txt
+          grep -Fq "Version: 21.3-JJS.011 (2103000)" android/BUILD-INFO.txt
+          EXPECTED="$(awk '{print $1; exit}' android/SHA256SUMS.txt)"
+          ACTUAL="$(sha256sum "$APK" | awk '{print $1}')"
+          test "$ACTUAL" = "$EXPECTED"
+
+          for dir in x64 rpi4; do
+            test -f "$dir/kodi-jjs-gapless-libreelec.patch"
+            test -f "$dir/kodi-jjs-identity-libreelec.patch"
+            grep -Fq 'xbmc/filesystem/NFSFile.cpp' "$dir/kodi-jjs-gapless-libreelec.patch"
+            grep -Fq 'VERSION_TAG JJS.011' "$dir/kodi-jjs-identity-libreelec.patch"
+          done
+          test -n "$(find x64 -type f -name 'LibreELEC-Generic.x86_64-12.2.1-JJS.011.tar' -print -quit)"
+          test -n "$(find x64 -type f -name 'LibreELEC-Generic.x86_64-12.2.1-JJS.011.img.gz' -print -quit)"
+          test -n "$(find rpi4 -type f -name 'LibreELEC-RPi4.aarch64-12.2.1-JJS.011.tar' -print -quit)"
+          test -n "$(find rpi4 -type f -name 'LibreELEC-RPi4.aarch64-12.2.1-JJS.011.img.gz' -print -quit)"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > RELEASE-NOTES.md <<'EOF'
+          # JJS.011 – Upstream Kodi NFS write-context race fixed
+
+          Confirmed build platforms:
+          - Android ARM64 / arm64-v8a
+          - LibreELEC 12.2.1 Generic x86_64
+          - LibreELEC 12.2.1 Raspberry Pi 4 / aarch64
+
+          ## JJS.011 change
+
+          **Important:** This was a bug in standard Kodi, not a Kodi JJS regression. The same freeze was reproduced with unmodified standard Kodi.
+
+          - **Problem:** Kodi could freeze completely during NFS file operations when an active file write overlapped with access to another NFS export.
+          - **Cause:** `CNFSFile::Write()` used a global write-chunk size which could temporarily become zero while another thread switched the active NFS context. A zero-length `nfs_write()` then returned zero bytes, while Kodi's write loop made no forward progress and continued indefinitely while holding the global NFS lock.
+          - **Solution:** JJS.011 obtains the write limit from the NFS context belonging to the open file while holding the connection lock. Zero-length and zero-progress writes are explicitly rejected, preventing the condition from turning into an infinite loop.
+
+          JJS.010 already extended the successful JJS.009 optimization across all music-file operations. Artist, album and song artwork plus cached path thumb/fanart mappings are prefetched for the complete item set, with the result of dramatically improved access to already cached artwork and images.
+
+          All JJS.010 and earlier fixes are retained, including the JJS.009/JJS.010 music artwork/cache optimizations, seamless RAW / TrueHD / Dolby Atmos handover, MAT state preservation, RAW EOF backlog handling, music-library cancellation handling, DialogProgressBG lifecycle handling, Kodi JJS splash and LibreELEC update-safety defaults.
+          EOF
+
+          mapfile -t ANDROID_FILES < <(find android -maxdepth 1 -type f \( -name '*.apk' -o -name '*.txt' \) -print | sort)
+          mapfile -t X64_FILES < <(find x64 -type f \( -name '*.tar' -o -name '*.img.gz' -o -name '*.sha256' \) -print | sort)
+          mapfile -t RPI4_FILES < <(find rpi4 -type f \( -name '*.tar' -o -name '*.img.gz' -o -name '*.sha256' \) -print | sort)
+          RELEASE_FILES=("${ANDROID_FILES[@]}" "${X64_FILES[@]}" "${RPI4_FILES[@]}" x64/kodi-jjs-gapless-libreelec.patch x64/kodi-jjs-identity-libreelec.patch)
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" "${RELEASE_FILES[@]}" --clobber
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --title "$RELEASE_TITLE" --notes-file RELEASE-NOTES.md
+          else
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$SOURCE_COMMIT" --title "$RELEASE_TITLE" --notes-file RELEASE-NOTES.md "${RELEASE_FILES[@]}"
+          fi
+
+      - name: Update README current release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch master "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" repo
+          cd repo
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('README.md')
+          s = p.read_text(encoding='utf-8')
+          replacements = {
+              '**Kodi JJS 21.3-JJS.010 – Android ARM64 / LibreELEC Generic x86_64 / LibreELEC Raspberry Pi 4**': '**Kodi JJS 21.3-JJS.011 – Android ARM64 / LibreELEC Generic x86_64 / LibreELEC Raspberry Pi 4**',
+              'https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.010': 'https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.011',
+              'JJS.010 provides LibreELEC 12.2.1 builds for **Generic x86_64** and **Raspberry Pi 4 (aarch64)**.': 'JJS.011 provides LibreELEC 12.2.1 builds for **Generic x86_64** and **Raspberry Pi 4 (aarch64)**.',
+              'JJS.010 source commit: **`f5cbef54a2d04807e35441b9fe84eaacbb4b3b6c`**': 'JJS.011 source commit: **`51e9fccfb8fdfd3eb0601a29f249d86424dd0fbe`**',
+          }
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f'README marker not found: {old}')
+              s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          if ! git diff --cached --quiet; then
+            git commit -m "Document Kodi JJS 21.3-JJS.011 release"
+            git push origin HEAD:master
+          fi
