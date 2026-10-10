@@ -8276,8 +8276,217 @@ bool CVideoDatabase::GetMoviesByWhere(const std::string& strBaseDir, const Filte
       }
     }
 
-    // cleanup
+    // cleanup the main movie query before the bulk preload queries
     m_pDS->close();
+
+    // JJS.012: Native movie title lists already have idMovie/idFile/idSet for every item.
+    // Preload stream details and library artwork in bulk so CVideoThumbLoader does not
+    // perform one database query per movie. This stays inside CVideoDatabase and therefore
+    // uses the same SQLite/MySQL/MariaDB abstraction as the normal video library.
+    if (StringUtils::StartsWith(strBaseDir, "videodb://movies/titles/") && m_pDS2)
+    {
+      const auto bulkStart = std::chrono::steady_clock::now();
+      std::map<int, CFileItemPtr> itemsByFile;
+      std::map<int, CFileItemPtr> itemsByMovie;
+      for (const auto& item : items)
+      {
+        if (!item || !item->HasVideoInfoTag())
+          continue;
+        CVideoInfoTag* tag = item->GetVideoInfoTag();
+        if (tag->m_iFileId >= 0)
+          itemsByFile[tag->m_iFileId] = item;
+        if (tag->m_iDbId >= 0)
+          itemsByMovie[tag->m_iDbId] = item;
+      }
+
+      const std::string selectedMoviesSQL =
+          "SELECT movie_view.idMovie, movie_view.idFile, movie_view.idSet FROM movie_view " +
+          strSQLExtra;
+
+      size_t streamRows = 0;
+      size_t streamFiles = 0;
+      bool streamQueryOk = true;
+      const auto streamStart = std::chrono::steady_clock::now();
+
+      if (!(getDetails & VideoDbDetailsStream))
+      {
+        std::set<int> loadedStreamFiles;
+        const std::string streamSQL =
+            "SELECT DISTINCT streamdetails.* FROM streamdetails JOIN (" + selectedMoviesSQL +
+            ") AS selected_movies ON selected_movies.idFile = streamdetails.idFile";
+        streamQueryOk = m_pDS2->query(streamSQL);
+        if (streamQueryOk)
+        {
+          while (!m_pDS2->eof())
+          {
+            const int fileId = m_pDS2->fv(0).get_asInt();
+            const auto itemIt = itemsByFile.find(fileId);
+            if (itemIt != itemsByFile.end())
+            {
+              CVideoInfoTag* tag = itemIt->second->GetVideoInfoTag();
+              CStreamDetails& details = tag->m_streamDetails;
+              if (loadedStreamFiles.insert(fileId).second)
+                details.Reset();
+
+              const CStreamDetail::StreamType streamType =
+                  static_cast<CStreamDetail::StreamType>(m_pDS2->fv(1).get_asInt());
+              switch (streamType)
+              {
+                case CStreamDetail::VIDEO:
+                {
+                  CStreamDetailVideo* p = new CStreamDetailVideo();
+                  p->m_strCodec = m_pDS2->fv(2).get_asString();
+                  p->m_fAspect = m_pDS2->fv(3).get_asFloat();
+                  p->m_iWidth = m_pDS2->fv(4).get_asInt();
+                  p->m_iHeight = m_pDS2->fv(5).get_asInt();
+                  p->m_iDuration = m_pDS2->fv(10).get_asInt();
+                  p->m_strStereoMode = m_pDS2->fv(11).get_asString();
+                  p->m_strLanguage = m_pDS2->fv(12).get_asString();
+                  p->m_strHdrType = m_pDS2->fv(13).get_asString();
+                  details.AddStream(p);
+                  break;
+                }
+                case CStreamDetail::AUDIO:
+                {
+                  CStreamDetailAudio* p = new CStreamDetailAudio();
+                  p->m_strCodec = m_pDS2->fv(6).get_asString();
+                  p->m_iChannels = m_pDS2->fv(7).get_isNull()
+                                         ? -1
+                                         : m_pDS2->fv(7).get_asInt();
+                  p->m_strLanguage = m_pDS2->fv(8).get_asString();
+                  details.AddStream(p);
+                  break;
+                }
+                case CStreamDetail::SUBTITLE:
+                {
+                  CStreamDetailSubtitle* p = new CStreamDetailSubtitle();
+                  p->m_strLanguage = m_pDS2->fv(9).get_asString();
+                  details.AddStream(p);
+                  break;
+                }
+                default:
+                  break;
+              }
+              ++streamRows;
+            }
+            m_pDS2->next();
+          }
+          m_pDS2->close();
+
+          for (const int fileId : loadedStreamFiles)
+          {
+            const auto itemIt = itemsByFile.find(fileId);
+            if (itemIt == itemsByFile.end())
+              continue;
+            CVideoInfoTag* tag = itemIt->second->GetVideoInfoTag();
+            CStreamDetails& details = tag->m_streamDetails;
+            details.DetermineBestStreams();
+            if (details.GetVideoDuration() > 0)
+              tag->SetDuration(details.GetVideoDuration());
+          }
+          streamFiles = loadedStreamFiles.size();
+        }
+        else
+        {
+          m_pDS2->close();
+        }
+      }
+
+      const auto streamEnd = std::chrono::steady_clock::now();
+      CLog::Log(LOGINFO,
+                "[JJS.012 movie bulk] streams: rows={}, files={}, ok={}, {} ms",
+                streamRows, streamFiles, streamQueryOk,
+                std::chrono::duration_cast<std::chrono::milliseconds>(streamEnd - streamStart)
+                    .count());
+
+      size_t movieArtRows = 0;
+      bool movieArtOk = false;
+      const auto movieArtStart = std::chrono::steady_clock::now();
+      const std::string movieArtSQL =
+          "SELECT DISTINCT selected_movies.idMovie, art.type, art.url FROM art JOIN (" +
+          selectedMoviesSQL +
+          ") AS selected_movies ON art.media_id = selected_movies.idMovie "
+          "WHERE art.media_type = 'movie'";
+      movieArtOk = m_pDS2->query(movieArtSQL);
+      if (movieArtOk)
+      {
+        while (!m_pDS2->eof())
+        {
+          const int movieId = m_pDS2->fv(0).get_asInt();
+          const auto itemIt = itemsByMovie.find(movieId);
+          if (itemIt != itemsByMovie.end())
+          {
+            itemIt->second->SetArt(m_pDS2->fv(1).get_asString(),
+                                   m_pDS2->fv(2).get_asString());
+            ++movieArtRows;
+          }
+          m_pDS2->next();
+        }
+        m_pDS2->close();
+      }
+      else
+      {
+        m_pDS2->close();
+      }
+      const auto movieArtEnd = std::chrono::steady_clock::now();
+      CLog::Log(LOGINFO,
+                "[JJS.012 movie bulk] movie art: rows={}, ok={}, {} ms", movieArtRows,
+                movieArtOk,
+                std::chrono::duration_cast<std::chrono::milliseconds>(movieArtEnd - movieArtStart)
+                    .count());
+
+      size_t setArtRows = 0;
+      bool setArtOk = false;
+      const auto setArtStart = std::chrono::steady_clock::now();
+      const std::string setArtSQL =
+          "SELECT DISTINCT selected_movies.idMovie, art.type, art.url FROM art JOIN (" +
+          selectedMoviesSQL +
+          ") AS selected_movies ON art.media_id = selected_movies.idSet "
+          "WHERE art.media_type = 'set'";
+      setArtOk = m_pDS2->query(setArtSQL);
+      if (setArtOk)
+      {
+        while (!m_pDS2->eof())
+        {
+          const int movieId = m_pDS2->fv(0).get_asInt();
+          const auto itemIt = itemsByMovie.find(movieId);
+          if (itemIt != itemsByMovie.end())
+          {
+            itemIt->second->SetArt("set." + m_pDS2->fv(1).get_asString(),
+                                   m_pDS2->fv(2).get_asString());
+            ++setArtRows;
+          }
+          m_pDS2->next();
+        }
+        m_pDS2->close();
+      }
+      else
+      {
+        m_pDS2->close();
+      }
+      const auto setArtEnd = std::chrono::steady_clock::now();
+      CLog::Log(LOGINFO,
+                "[JJS.012 movie bulk] set art: rows={}, ok={}, {} ms", setArtRows,
+                setArtOk,
+                std::chrono::duration_cast<std::chrono::milliseconds>(setArtEnd - setArtStart)
+                    .count());
+
+      if (movieArtOk && setArtOk)
+      {
+        for (const auto& item : items)
+        {
+          if (item && item->HasVideoInfoTag())
+            item->SetProperty("libraryartfilled", true);
+        }
+      }
+
+      const auto bulkEnd = std::chrono::steady_clock::now();
+      CLog::Log(LOGINFO,
+                "[JJS.012 movie bulk] complete: items={}, {} ms", items.Size(),
+                std::chrono::duration_cast<std::chrono::milliseconds>(bulkEnd - bulkStart)
+                    .count());
+    }
+
     return true;
   }
   catch (...)
