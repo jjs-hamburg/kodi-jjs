@@ -71,9 +71,9 @@ In addition to the gapless RAW / TrueHD / Atmos work, Kodi JJS carries a small s
 
 ### Current release
 
-**Kodi JJS 21.3-JJS.010 – Android ARM64 / LibreELEC Generic x86_64 / LibreELEC Raspberry Pi 4**
+**Kodi JJS 21.3-JJS.011 – Android ARM64 / LibreELEC Generic x86_64 / LibreELEC Raspberry Pi 4**
 
-[Download the current release](https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.010)
+[Download the current release](https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.011)
 
 The Android build uses its own package name, **`org.jjs.kodi`**, so it can be installed **in parallel with standard Kodi**.
 
@@ -100,7 +100,7 @@ Because Kodi JJS uses a separate Android package, the existing Kodi installation
 
 ### LibreELEC
 
-JJS.010 provides LibreELEC 12.2.1 builds for **Generic x86_64** and **Raspberry Pi 4 (aarch64)**.
+JJS.011 provides LibreELEC 12.2.1 builds for **Generic x86_64** and **Raspberry Pi 4 (aarch64)**.
 
 Before installing a JJS LibreELEC TAR:
 
@@ -171,7 +171,7 @@ This is what allows Kodi JJS and official Kodi (`org.xbmc.kodi`) to coexist on t
 
 The JJS audio changes are in Kodi core and are not specific to NVIDIA Shield hardware.
 
-JJS.010 source commit: **`f5cbef54a2d04807e35441b9fe84eaacbb4b3b6c`**
+JJS.011 source commit: **`51e9fccfb8fdfd3eb0601a29f249d86424dd0fbe`**
 
 For a more detailed technical description, see **[README.JJS.md](README.JJS.md)**.
 
