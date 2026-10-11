@@ -69,11 +69,16 @@ In addition to the gapless RAW / TrueHD / Atmos work, Kodi JJS carries a small s
   **Cause:** `CNFSFile::Write()` used a global write-chunk size which could temporarily become zero while another thread switched the active NFS context. A zero-length `nfs_write()` then returned zero bytes, while Kodi's write loop made no forward progress and continued indefinitely while holding the global NFS lock.  
   **Solution:** JJS.011 obtains the write limit from the NFS context belonging to the open file while holding the connection lock. Zero-length and zero-progress writes are explicitly rejected, preventing the condition from turning into an infinite loop.
 
+- **Slow large movie-title lists optimized – JJS.012**  
+**Problem:** Opening large movie title lists could take a long time before all movie details were available, especially with a central MariaDB/MySQL database.  
+**Cause:** Kodi could fetch stream details and library artwork item by item after the movie list itself had already been loaded, producing many additional database round trips.  
+**Solution:** JJS.012 bulk-loads stream details plus movie/set artwork for the complete native movie-title result set inside `CVideoDatabase`, eliminating the per-movie database-query pattern.
+
 ### Current release
 
-**Kodi JJS 21.3-JJS.011 – Android ARM64 / LibreELEC Generic x86_64 / LibreELEC Raspberry Pi 4**
+**Kodi JJS 21.3-JJS.012 – Android ARM64 / LibreELEC Generic x86_64 / LibreELEC Raspberry Pi 4**
 
-[Download the current release](https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.011)
+[Download the current release](https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.012)
 
 The Android build uses its own package name, **`org.jjs.kodi`**, so it can be installed **in parallel with standard Kodi**.
 
@@ -100,7 +105,7 @@ Because Kodi JJS uses a separate Android package, the existing Kodi installation
 
 ### LibreELEC
 
-JJS.011 provides LibreELEC 12.2.1 builds for **Generic x86_64** and **Raspberry Pi 4 (aarch64)**.
+JJS.012 provides LibreELEC 12.2.1 builds for **Generic x86_64** and **Raspberry Pi 4 (aarch64)**.
 
 Before installing a JJS LibreELEC TAR:
 
@@ -171,7 +176,7 @@ This is what allows Kodi JJS and official Kodi (`org.xbmc.kodi`) to coexist on t
 
 The JJS audio changes are in Kodi core and are not specific to NVIDIA Shield hardware.
 
-JJS.011 source commit: **`51e9fccfb8fdfd3eb0601a29f249d86424dd0fbe`**
+JJS.012 source commit: **`6f986afc0453b996209345003d5621fe9da5941a`**
 
 For a more detailed technical description, see **[README.JJS.md](README.JJS.md)**.
 
