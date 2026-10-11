@@ -1,0 +1,62 @@
+name: Update README for JJS.012
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/update-readme-jjs012.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update README
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch master "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" repo
+          cd repo
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('README.md')
+          s = p.read_text(encoding='utf-8')
+
+          addition = """- **Slow large movie-title lists optimized – JJS.012**  
+          **Problem:** Opening large movie title lists could take a long time before all movie details were available, especially with a central MariaDB/MySQL database.  
+          **Cause:** Kodi could fetch stream details and library artwork item by item after the movie list itself had already been loaded, producing many additional database round trips.  
+          **Solution:** JJS.012 bulk-loads stream details plus movie/set artwork for the complete native movie-title result set inside `CVideoDatabase`, eliminating the per-movie database-query pattern.
+
+          """
+          if 'Slow large movie-title lists optimized – JJS.012' not in s:
+              marker = '### Current release\n'
+              if marker not in s:
+                  raise SystemExit('Current release marker not found')
+              s = s.replace(marker, addition + marker, 1)
+
+          replacements = {
+              '**Kodi JJS 21.3-JJS.011 – Android ARM64 / LibreELEC Generic x86_64 / LibreELEC Raspberry Pi 4**': '**Kodi JJS 21.3-JJS.012 – Android ARM64 / LibreELEC Generic x86_64 / LibreELEC Raspberry Pi 4**',
+              'https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.011': 'https://github.com/jjs-hamburg/kodi-jjs/releases/tag/v21.3-JJS.012',
+              'JJS.011 provides LibreELEC 12.2.1 builds for **Generic x86_64** and **Raspberry Pi 4 (aarch64)**.': 'JJS.012 provides LibreELEC 12.2.1 builds for **Generic x86_64** and **Raspberry Pi 4 (aarch64)**.',
+              'JJS.011 source commit: **`51e9fccfb8fdfd3eb0601a29f249d86424dd0fbe`**': 'JJS.012 source commit: **`6f986afc0453b996209345003d5621fe9da5941a`**',
+          }
+          for old, new in replacements.items():
+              if old in s:
+                  s = s.replace(old, new, 1)
+              elif new not in s:
+                  raise SystemExit(f'README marker not found: {old}')
+
+          p.write_text(s, encoding='utf-8')
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          if ! git diff --cached --quiet; then
+            git commit -m "Document Kodi JJS 21.3-JJS.012 release"
+            git push origin HEAD:master
+          fi
